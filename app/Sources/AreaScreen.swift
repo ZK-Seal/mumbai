@@ -10,6 +10,10 @@ struct AreaScreen: View {
 
     /// The long side a photo is drawn at, unless the Full size setting is on.
     private static let stageLongSide = 1600
+    /// How long this screen waits for one job, in seconds.
+    private static let waitLimit: TimeInterval = 600
+    /// How many failed checks in a row, one second apart, before it stops asking.
+    private static let failedChecksLimit = 10
 
     @State private var pick: PhotosPickerItem?
     @State private var source: UIImage?
@@ -21,6 +25,7 @@ struct AreaScreen: View {
     @State private var running = false
     @State private var progress: String?
     @State private var finished: FinishedJob?
+    @State private var jobTask: Task<Void, Never>?
 
     /// A finished job, for the result screen.
     private struct FinishedJob: Identifiable {
@@ -62,7 +67,10 @@ struct AreaScreen: View {
         }
         .padding(16)
         .task(id: pick) { await load() }
-        .onChange(of: cellSize) { prepare() }
+        .onChange(of: cellSize) {
+            progress = nil
+            prepare()
+        }
         .onChange(of: fullSize) {
             clearBox()
             prepare()
@@ -72,6 +80,8 @@ struct AreaScreen: View {
                 finished = nil
                 clearBox()
             }
+            // The words must stay with the result, so only "Start over" closes it.
+            .interactiveDismissDisabled()
         }
     }
 
@@ -83,8 +93,12 @@ struct AreaScreen: View {
                     .multilineTextAlignment(.center)
             }
             HStack {
-                Button("Clear box") { clearBox() }
-                    .disabled(box == nil || running)
+                if running {
+                    Button("Stop waiting") { jobTask?.cancel() }
+                } else {
+                    Button("Clear box") { clearBox() }
+                        .disabled(box == nil)
+                }
                 Spacer()
                 Button("Blank this area") { startJob() }
                     .buttonStyle(.borderedProminent)
@@ -175,38 +189,57 @@ struct AreaScreen: View {
     private func startJob() {
         guard let photo, let box, let serviceURL else { return }
         running = true
-        Task {
+        jobTask = Task {
             progress = await runJob(ServiceClient(base: serviceURL), photo: photo, box: box)
             running = false
+            jobTask = nil
         }
     }
 
-    /// Sends the photo and waits for the job to end. Returns the line to show.
-    private func runJob(_ client: ServiceClient, photo: PreparedPhoto, box: GridBox) async -> String {
+    /// Sends the photo and waits for the job to end. Returns the line to show, or nil when the result opens.
+    private func runJob(_ client: ServiceClient, photo: PreparedPhoto, box: GridBox) async -> String? {
+        let stopped = "Stopped waiting. The server may still be working, so the next send can say it is busy."
         progress = "Sending."
+        let id: String
         do {
-            let id = try await client.seal(jpeg: photo.jpeg, box: box)
-            let started = Date()
-            while true {
+            id = try await client.seal(jpeg: photo.jpeg, box: box)
+        } catch ServiceError.refused(let reason) {
+            return sentence(forReason: reason)
+        } catch {
+            return Task.isCancelled ? stopped : "Could not reach the service."
+        }
+        let started = Date()
+        var failedChecks = 0
+        while !Task.isCancelled {
+            let seconds = Date().timeIntervalSince(started)
+            if seconds > Self.waitLimit {
+                return "This took too long, so the screen stopped waiting. The server may still be working."
+            }
+            do {
                 let job = try await client.job(id: id)
+                failedChecks = 0
                 switch job.state {
                 case "queued", "running":
-                    progress = "Working: \(Int(Date().timeIntervalSince(started))) s"
-                    try await Task.sleep(for: .seconds(1))
+                    progress = "Working: \(Int(seconds)) s"
                 case "done":
                     guard let result = JobResult(job: job, box: box, width: photo.width, height: photo.height) else {
                         return "The answer does not match what was sent, so no result is shown."
                     }
                     finished = FinishedJob(id: id, client: client, result: result, width: photo.width, height: photo.height)
-                    return "Edit: blank. Check: OK."
+                    return nil
                 default:
                     return sentence(forReason: job.reason ?? "failed")
                 }
+            } catch ServiceError.refused(let reason) {
+                return sentence(forReason: reason)
+            } catch {
+                failedChecks += 1
+                if failedChecks >= Self.failedChecksLimit, !Task.isCancelled {
+                    return "Could not reach the service. The job may still be running."
+                }
             }
-        } catch ServiceError.refused(let reason) {
-            return sentence(forReason: reason)
-        } catch {
-            return "Could not reach the service."
+            try? await Task.sleep(for: .seconds(1))
         }
+        return stopped
     }
 }

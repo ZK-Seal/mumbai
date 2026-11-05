@@ -10,7 +10,7 @@ struct JobResult {
         guard job.state == "done", job.edit == "blank", job.check == "OK",
               job.areas == [[box.x, box.y, box.width, box.height]],
               job.width == width, job.height == height,
-              let hash = job.sha256, hash.count == 64,
+              let hash = job.sha256, hash.count == 64, hash.allSatisfy({ "0123456789abcdef".contains($0) }),
               job.seal_signer == "not-on-a-trust-list" else { return nil }
         let signer: String
         switch job.origin {
@@ -36,6 +36,7 @@ struct JobResult {
             signer,
             "Seal signer: not on a trust list.",
             "This screen shows a plain copy of the picture. The sealed file stays on our server and cannot be downloaded.",
+            "The hash below names the sealed file, not this copy. This phone cannot check it.",
         ]
     }
 }

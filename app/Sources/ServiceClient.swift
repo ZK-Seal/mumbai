@@ -50,7 +50,8 @@ struct ServiceClient {
 
     /// The job's state now.
     func job(id: String) async throws -> ServiceJob {
-        let (data, code) = try await send(URLRequest(url: base.appendingPathComponent("seal/\(id)")))
+        // A short limit, so one stuck check does not hold the wait.
+        let (data, code) = try await send(URLRequest(url: base.appendingPathComponent("seal/\(id)"), timeoutInterval: 10))
         if code == 200, let job = try? JSONDecoder().decode(ServiceJob.self, from: data) {
             return job
         }
