@@ -1,7 +1,7 @@
 import PhotosUI
 import SwiftUI
 
-/// The first screen: choose a photo, draw a box on it with a finger, send it, and wait.
+/// The first screen: choose a photo, draw a box on it with a finger, send it, wait, and open the result.
 struct AreaScreen: View {
     /// The grid the box snaps to, in photo pixels.
     @AppStorage("cellSize") private var cellSize = 16
@@ -20,6 +20,16 @@ struct AreaScreen: View {
     @State private var end: CGPoint?
     @State private var running = false
     @State private var progress: String?
+    @State private var finished: FinishedJob?
+
+    /// A finished job, for the result screen.
+    private struct FinishedJob: Identifiable {
+        let id: String
+        let client: ServiceClient
+        let result: JobResult
+        let width: Int
+        let height: Int
+    }
 
     private var box: GridBox? {
         guard let start, let end, let photo else { return nil }
@@ -56,6 +66,12 @@ struct AreaScreen: View {
         .onChange(of: fullSize) {
             clearBox()
             prepare()
+        }
+        .sheet(item: $finished) { job in
+            ResultScreen(client: job.client, jobID: job.id, result: job.result, width: job.width, height: job.height) {
+                finished = nil
+                clearBox()
+            }
         }
     }
 
@@ -178,7 +194,11 @@ struct AreaScreen: View {
                     progress = "Working: \(Int(Date().timeIntervalSince(started))) s"
                     try await Task.sleep(for: .seconds(1))
                 case "done":
-                    return job.edit == "blank" && job.check == "OK" ? "Edit: blank. Check: OK." : sentence(forReason: "failed")
+                    guard let result = JobResult(job: job, box: box, width: photo.width, height: photo.height) else {
+                        return "The answer does not match what was sent, so no result is shown."
+                    }
+                    finished = FinishedJob(id: id, client: client, result: result, width: photo.width, height: photo.height)
+                    return "Edit: blank. Check: OK."
                 default:
                     return sentence(forReason: job.reason ?? "failed")
                 }

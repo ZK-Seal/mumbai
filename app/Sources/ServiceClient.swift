@@ -10,6 +10,8 @@ struct ServiceJob: Decodable {
     var origin: String?
     var seal_signer: String?
     var sha256: String?
+    var width: Int?
+    var height: Int?
 }
 
 enum ServiceError: Error {
@@ -53,6 +55,13 @@ struct ServiceClient {
             return job
         }
         throw refusal(data)
+    }
+
+    /// The plain picture of a finished job, to show on the screen.
+    func picture(id: String) async throws -> Data {
+        let (data, code) = try await send(URLRequest(url: base.appendingPathComponent("seal/\(id)/picture")))
+        guard code == 200 else { throw ServiceError.unreachable }
+        return data
     }
 
     func send(_ request: URLRequest) async throws -> (Data, Int) {
