@@ -19,3 +19,9 @@ targets:
     platform: iOS
     sources:
       - Sources
+    info:
+      path: build/Info.plist
+      properties:
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        NSLocalNetworkUsageDescription: "The app sends your photo to the service on this network."

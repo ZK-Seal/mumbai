@@ -1,35 +1,43 @@
 import PhotosUI
 import SwiftUI
 
-/// The first screen: choose a photo, then draw a box on it with a finger.
+/// The first screen: choose a photo, draw a box on it with a finger, send it, and wait.
 struct AreaScreen: View {
     /// The grid the box snaps to, in photo pixels.
     @AppStorage("cellSize") private var cellSize = 16
+    @AppStorage("fullSize") private var fullSize = false
+    @AppStorage("serviceAddress") private var serviceAddress = ""
+
+    /// The long side a photo is drawn at, unless the Full size setting is on.
+    private static let stageLongSide = 1600
 
     @State private var pick: PhotosPickerItem?
-    @State private var photo: UIImage?
+    @State private var source: UIImage?
+    @State private var photo: PreparedPhoto?
     @State private var problem: String?
     // The finger's two points, in photo pixels. The box is worked out from them, so it follows the cell size.
     @State private var start: CGPoint?
     @State private var end: CGPoint?
-
-    private var photoWidth: Int { photo.map { Int($0.size.width * $0.scale) } ?? 0 }
-    private var photoHeight: Int { photo.map { Int($0.size.height * $0.scale) } ?? 0 }
+    @State private var running = false
+    @State private var progress: String?
 
     private var box: GridBox? {
-        guard let start, let end else { return nil }
-        return GridBox.snapped(from: start, to: end, photoWidth: photoWidth, photoHeight: photoHeight, cell: cellSize)
+        guard let start, let end, let photo else { return nil }
+        return GridBox.snapped(from: start, to: end, photoWidth: photo.width, photoHeight: photo.height, cell: cellSize)
     }
 
+    private var serviceURL: URL? { ServiceClient.address(fromSettings: serviceAddress) }
+
     private var boxLine: String {
-        guard photo != nil else { return problem ?? "No photo yet." }
+        guard let photo else { return problem ?? "No photo yet." }
         guard let box else { return "Draw a box on the photo with a finger." }
-        return "Box: \(box.width) x \(box.height) at \(box.x), \(box.y) in a \(photoWidth) x \(photoHeight) photo"
+        return "Box: \(box.width) x \(box.height) at \(box.x), \(box.y) in a \(photo.width) x \(photo.height) photo"
     }
 
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 12) {
             PhotosPicker("Choose a sample photo", selection: $pick, matching: .images)
+                .disabled(running)
             Spacer(minLength: 0)
             if let photo {
                 canvas(photo)
@@ -39,28 +47,74 @@ struct AreaScreen: View {
                 .font(.footnote)
                 .multilineTextAlignment(.center)
                 .accessibilityIdentifier("boxLine")
-            Stepper("Cell size: \(cellSize) px", value: $cellSize, in: 8...64, step: 8)
-            Button("Clear box") { clearBox() }
-                .disabled(box == nil)
+            sendArea
+            settings
         }
         .padding(16)
         .task(id: pick) { await load() }
+        .onChange(of: cellSize) { prepare() }
+        .onChange(of: fullSize) {
+            clearBox()
+            prepare()
+        }
+    }
+
+    private var sendArea: some View {
+        VStack(spacing: 8) {
+            if box != nil {
+                Text("This photo goes to our server for the proof check.")
+                    .font(.footnote)
+                    .multilineTextAlignment(.center)
+            }
+            HStack {
+                Button("Clear box") { clearBox() }
+                    .disabled(box == nil || running)
+                Spacer()
+                Button("Blank this area") { startJob() }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(box == nil || running || serviceURL == nil)
+            }
+            if let progress {
+                Text(progress)
+                    .font(.footnote)
+                    .multilineTextAlignment(.center)
+                    .accessibilityIdentifier("progress")
+            }
+        }
+    }
+
+    private var settings: some View {
+        DisclosureGroup("Settings") {
+            VStack(spacing: 8) {
+                TextField("Service address", text: $serviceAddress)
+                    .textFieldStyle(.roundedBorder)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .keyboardType(.URL)
+                Toggle("Full size", isOn: $fullSize)
+                Stepper("Cell size: \(cellSize) px", value: $cellSize, in: 8...64, step: 8)
+            }
+            .padding(.top, 8)
+            .disabled(running)
+        }
     }
 
     /// The photo, the area that takes the finger, and the box on top.
-    private func canvas(_ photo: UIImage) -> some View {
-        Image(uiImage: photo)
+    private func canvas(_ photo: PreparedPhoto) -> some View {
+        Image(uiImage: photo.image)
             .resizable()
             .scaledToFit()
             .overlay {
                 GeometryReader { view in
-                    let pixelsPerPoint = CGFloat(photoWidth) / max(view.size.width, 1)
+                    let pixelsPerPoint = CGFloat(photo.width) / max(view.size.width, 1)
                     ZStack(alignment: .topLeading) {
                         Color.clear
                             .contentShape(Rectangle())
                             .gesture(DragGesture(minimumDistance: 0).onChanged { drag in
+                                guard !running else { return }
                                 start = CGPoint(x: drag.startLocation.x * pixelsPerPoint, y: drag.startLocation.y * pixelsPerPoint)
                                 end = CGPoint(x: drag.location.x * pixelsPerPoint, y: drag.location.y * pixelsPerPoint)
+                                progress = nil
                             })
                         if let box {
                             Rectangle()
@@ -79,17 +133,60 @@ struct AreaScreen: View {
     private func clearBox() {
         start = nil
         end = nil
+        progress = nil
     }
 
     private func load() async {
         guard let pick else { return }
         clearBox()
+        source = nil
         photo = nil
         problem = nil
         let data = try? await pick.loadTransferable(type: Data.self)
-        photo = data.flatMap { UIImage(data: $0) }
+        source = data.flatMap { UIImage(data: $0) }
+        prepare()
         if photo == nil {
             problem = "Could not read this photo."
+        }
+    }
+
+    private func prepare() {
+        photo = source.flatMap {
+            PreparedPhoto.make(from: $0, longSide: fullSize ? nil : Self.stageLongSide, cell: cellSize)
+        }
+    }
+
+    private func startJob() {
+        guard let photo, let box, let serviceURL else { return }
+        running = true
+        Task {
+            progress = await runJob(ServiceClient(base: serviceURL), photo: photo, box: box)
+            running = false
+        }
+    }
+
+    /// Sends the photo and waits for the job to end. Returns the line to show.
+    private func runJob(_ client: ServiceClient, photo: PreparedPhoto, box: GridBox) async -> String {
+        progress = "Sending."
+        do {
+            let id = try await client.seal(jpeg: photo.jpeg, box: box)
+            let started = Date()
+            while true {
+                let job = try await client.job(id: id)
+                switch job.state {
+                case "queued", "running":
+                    progress = "Working: \(Int(Date().timeIntervalSince(started))) s"
+                    try await Task.sleep(for: .seconds(1))
+                case "done":
+                    return job.edit == "blank" && job.check == "OK" ? "Edit: blank. Check: OK." : sentence(forReason: "failed")
+                default:
+                    return sentence(forReason: job.reason ?? "failed")
+                }
+            }
+        } catch ServiceError.refused(let reason) {
+            return sentence(forReason: reason)
+        } catch {
+            return "Could not reach the service."
         }
     }
 }
