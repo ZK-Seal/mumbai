@@ -7,7 +7,7 @@ export default function Home() {
         page adds one more line to that result: who stands behind it.
       </p>
       <p className="soft">
-        Open this page from the app's result screen to authorise a sealed
+        Open this page from the app&rsquo;s result screen to authorise a sealed
         photo.
       </p>
     </main>
