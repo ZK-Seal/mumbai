@@ -273,3 +273,22 @@ input[type="text"]:focus-visible {
 .steps button {
   margin-top: 0.5rem;
 }
+
+input[type="password"] {
+  font: inherit;
+  min-height: 2.75rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  background: transparent;
+  color: var(--ink);
+}
+
+input[type="password"]:focus-visible {
+  outline: 3px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.add {
+  margin: 1.5rem 0 1rem;
+}

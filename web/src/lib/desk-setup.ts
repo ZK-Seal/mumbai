@@ -10,11 +10,13 @@ import {
   namehash,
   parseAbi,
   stringToHex,
+  toHex,
   zeroAddress,
   type Address,
   type Hex,
   type PublicClient,
 } from "viem";
+import { packetToBytes } from "viem/ens";
 import { deskPlace, labelHash, registryAbi, REGISTERED, textKeys } from "@/lib/ens";
 
 /**
@@ -65,10 +67,14 @@ export const memberListAbi = parseAbi([
   "function revokeRootRoles(uint256 roleBitmap, address account) returns (bool)",
   "function revokeRoles(uint256 resource, uint256 roleBitmap, address account) returns (bool)",
   "function hasRootRoles(uint256 roleBitmap, address account) view returns (bool)",
+  "function register(string label, address owner, address registry, address resolver, uint256 roleBitmap, uint64 expiry) returns (uint256)",
+  "function unregister(uint256 anyId)",
+  "event LabelRegistered(uint256 indexed tokenId, bytes32 indexed labelHash, string label, address owner, uint64 expiry, address indexed sender)",
 ]);
 
 export const membersResolverAbi = parseAbi([
   "function setText(bytes name, string key, string value)",
+  "function multicall(bytes[] data) returns (bytes[])",
   "function grantSetterRoles(bytes setter, address account) returns (bool)",
   "function revokeRootRoles(uint256 roleBitmap, address account) returns (bool)",
   "function revokeRoles(uint256 resource, uint256 roleBitmap, address account) returns (bool)",
@@ -308,8 +314,9 @@ function roleWithAdmin(bitmap: bigint): boolean {
  * Refuses any transaction this page has no business sending. Only these may be sent:
  * - to the factory: a deploy of the resolver or registry implementation, nothing else;
  * - to the desk's parent registry: setSubregistry of the desk's own label to the member list;
- * - to the member list: setParent, and the bot's two roles;
- * - to the members resolver: the bot's two setter grants.
+ * - to the member list: setParent, the bot's two roles, and the bot's add and remove of a member
+ *   (a member always points to the members resolver, and gets no roles of its own);
+ * - to the members resolver: the bot's two setter grants, and its writes of those two keys.
  * Nothing is ever sent to the resolver the desk's own name uses, and no transaction may revoke a
  * role together with its admin role.
  */
@@ -358,6 +365,28 @@ export function guard(tx: Tx, plan: Plan): void {
         }
         return;
       }
+      case "register": {
+        const [, owner, registry, resolver, roles, expiry] = call.args as [
+          string,
+          Address,
+          Address,
+          Address,
+          bigint,
+          bigint,
+        ];
+        if (
+          !isAddressEqual(owner, plan.owner) ||
+          registry !== zeroAddress ||
+          !isAddressEqual(resolver, plan.membersResolver) ||
+          roles !== BigInt(0) ||
+          expiry !== plan.expiry
+        ) {
+          refuse("register");
+        }
+        return;
+      }
+      case "unregister":
+        return;
       case "revokeRootRoles":
       case "revokeRoles": {
         const bitmap = call.args[call.args.length - 2] as bigint;
@@ -384,6 +413,12 @@ export function guard(tx: Tx, plan: Plan): void {
         }
         return;
       }
+      case "setText":
+        if (!isKeyWrite(tx.data)) refuse("setText key");
+        return;
+      case "multicall":
+        if (!(call.args[0] as readonly Hex[]).every(isKeyWrite)) refuse("multicall");
+        return;
       case "revokeRootRoles":
       case "revokeRoles": {
         const bitmap = call.args[call.args.length - 2] as bigint;
@@ -396,6 +431,62 @@ export function guard(tx: Tx, plan: Plan): void {
   }
 
   refuse("unknown contract");
+}
+
+/**
+ * The bot's write of a member's two records, in one multicall on the members resolver. Both keys
+ * are always written, an empty account included, so nothing from an earlier holder of the label
+ * is left behind.
+ */
+export function buildRecords(plan: Plan, name: string, pass: string, account: string | null): Tx {
+  const dns = toHex(packetToBytes(name));
+  const write = (key: string, value: string) =>
+    encodeFunctionData({
+      abi: membersResolverAbi,
+      functionName: "setText",
+      args: [dns, key, value],
+    });
+  const tx: Tx = {
+    to: plan.membersResolver,
+    data: encodeFunctionData({
+      abi: membersResolverAbi,
+      functionName: "multicall",
+      args: [[write(plan.keys.pass, pass), write(plan.keys.account, account ?? "")]],
+    }),
+  };
+  guard(tx, plan);
+  return tx;
+}
+
+/**
+ * The bot's registration of a member: held by the desk's own wallet, served by the members
+ * resolver, with no roles of its own and the desk's own expiry.
+ */
+export function buildRegister(plan: Plan, label: string): Tx {
+  const tx: Tx = {
+    to: plan.registry,
+    data: encodeFunctionData({
+      abi: memberListAbi,
+      functionName: "register",
+      args: [label, plan.owner, zeroAddress, plan.membersResolver, BigInt(0), plan.expiry],
+    }),
+  };
+  guard(tx, plan);
+  return tx;
+}
+
+/** The bot's removal of a member from the member list. */
+export function buildUnregister(plan: Plan, label: string): Tx {
+  const tx: Tx = {
+    to: plan.registry,
+    data: encodeFunctionData({
+      abi: memberListAbi,
+      functionName: "unregister",
+      args: [labelHash(label)],
+    }),
+  };
+  guard(tx, plan);
+  return tx;
 }
 
 /** Where a step stands on the chain. "blocked" means it cannot be sent yet, or must not be. */

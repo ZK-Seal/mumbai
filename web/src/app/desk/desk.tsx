@@ -20,6 +20,7 @@ import {
   type StepId,
   type StepState,
 } from "@/lib/desk-setup";
+import { Members } from "./members";
 
 declare global {
   interface Window {
@@ -282,6 +283,8 @@ export function Desk() {
           </>
         )}
       </section>
+
+      <Members desk={config.desk} />
     </>
   );
 }
