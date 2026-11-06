@@ -20,8 +20,14 @@ The app's screens do not explain any of this, so the facts are here.
 "Authorise this seal" shows with the picture, only if a web address is set. The address comes from Settings or from `WEB_URL` at launch, and it is not in this repo.
 If the web side is ready, the button goes to the World app and back, with no page between, through World's IDKit package, pinned to 4.2.0. The package's result goes to the web side unchanged. "Authorised" shows only after the web side answers that it verified the result, or answers with a record for this hash. A refusal or a failure shows "Not authorised", and the button stays.
 If the web side cannot be read or the World app cannot be opened, it opens that page in a sheet inside the app.
-It sends the hash, the edit, the size and `from=app` to that page, in the link. It sends no photo. It also sends an event's short name, set in Settings or with `EVENT_SLUG` at launch, but only if it is 3 to 40 lowercase letters, digits and hyphens, with no hyphen first.
+It sends the hash, the edit, the size and `from=app` to that page, in the link, with no photo. It also sends an event's short name, set in Settings or with `EVENT_SLUG` at launch, but only if it is 3 to 40 lowercase letters, digits and hyphens, with no hyphen first.
 The page comes back through a `blankdemo://` link, and the app does not trust that link alone. "Authorised" shows only if the link names this hash and the web side then answers with a record for it. Anything else shows "Not authorised", and the button stays.
+
+## The picture after authorising
+
+After the web side verifies a new authorisation, the app sends it the picture with its cover, and the web side puts that picture on Swarm, where anyone can read it. How long Swarm keeps it is not promised.
+The app makes that picture only from the backend's plain copy with the cover on top, flattened into one layer, with no metadata. It never uses the photo on the phone or the sealed file.
+The link between a picture and its seal is the uploader's word. A failed send does not change "Authorised". It shows one line and a way to try again.
 
 ## The cover on the screen
 

@@ -6,7 +6,8 @@ import UIKit
 @MainActor
 final class WorldStep {
     enum Outcome {
-        case authorised
+        /// The token comes only with the answer that made the record, and it lets the app send the picture once it has one.
+        case authorised(pictureToken: String?)
         case notAuthorised
         /// The web side could not be read, or the World app could not be opened, so the sheet takes over.
         case useSheet
@@ -32,6 +33,13 @@ final class WorldStep {
 
     private struct Finish: Decodable {
         var state: String
+        var picture_token: String?
+
+        /// Nil unless it has its fixed form, so nothing else can reach a header.
+        var token: String? {
+            guard let picture_token, picture_token.count == 64, picture_token.allSatisfy({ $0.isHexDigit && $0.isASCII }) else { return nil }
+            return picture_token
+        }
     }
 
     /// The web side's signed start lasts five minutes, so no wait is longer.
@@ -42,7 +50,7 @@ final class WorldStep {
     func run(base: String, hash: String, event: String?) async -> Outcome {
         guard let start: Start = await post(base, "/api/world/request", body(hash: hash, event: event), limit: 15) else { return .useSheet }
         // This answer carries the seal's record itself.
-        if start.state == "authorised" { return .authorised }
+        if start.state == "authorised" { return .authorised(pictureToken: nil) }
         guard start.state == "ready", start.signal == hash else { return .notAuthorised }
         guard let request = await makeRequest(from: start, hash: hash) else { return .useSheet }
         // The asking starts first, and it goes on while the person is away and after they return, before or after the proof arrives.
@@ -56,9 +64,9 @@ final class WorldStep {
         guard case .success(let result) = await asking.value, let json = try? idkitResultToJson(result: result) else { return .notAuthorised }
         let finish: Finish? = await post(base, "/api/world/verify", body(hash: hash, event: event, result: json), limit: 60)
         // This answer is trusted as it is. A second call could miss a fresh record.
-        if let finish { return finish.state == "verified" ? .authorised : .notAuthorised }
+        if let finish { return finish.state == "verified" ? .authorised(pictureToken: finish.token) : .notAuthorised }
         // With no answer at all, the record may still have been kept.
-        return await AuthoriseLink.hasRecord(base: base, hash: hash) ? .authorised : .notAuthorised
+        return await AuthoriseLink.hasRecord(base: base, hash: hash) ? .authorised(pictureToken: nil) : .notAuthorised
     }
 
     func stop() {

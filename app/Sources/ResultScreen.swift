@@ -33,10 +33,13 @@ struct ResultScreen: View {
     @State private var sheet = AuthoriseSheet()
     @State private var world = WorldStep()
     @State private var authorising = Authorising.notYet
+    @State private var pictureToken: String?
+    @State private var sending = Sending.none
     @State private var picture: UIImage?
     @State private var problem = false
 
     private enum Authorising { case notYet, waiting, notAuthorised, authorised }
+    private enum Sending { case none, sending, failed }
 
     var body: some View {
         ScrollView {
@@ -65,6 +68,25 @@ struct ResultScreen: View {
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 4)
                             .accessibilityIdentifier("authorised")
+                        switch sending {
+                        case .none:
+                            EmptyView()
+                        case .sending:
+                            ProgressView()
+                                .frame(maxWidth: .infinity)
+                        case .failed:
+                            HStack {
+                                Text("The picture was not sent.")
+                                    .font(Theme.text(14))
+                                    .foregroundStyle(.secondary)
+                                Button("Try again") { sendPicture() }
+                                    .font(Theme.text(14))
+                                    .buttonStyle(.bordered)
+                                    .controlSize(.small)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .accessibilityIdentifier("pictureNotSent")
+                        }
                     case .waiting:
                         ProgressView()
                             .frame(maxWidth: .infinity)
@@ -105,8 +127,10 @@ struct ResultScreen: View {
         let base = AuthoriseLink.base(fromSettings: webAddress)
         Task {
             switch await world.run(base: base, hash: result.hash, event: AuthoriseLink.event(fromSettings: event)) {
-            case .authorised:
+            case .authorised(let token):
                 authorising = .authorised
+                pictureToken = token
+                sendPicture()
             case .notAuthorised:
                 authorising = .notAuthorised
             case .useSheet:
@@ -116,6 +140,22 @@ struct ResultScreen: View {
                     return
                 }
                 authorising = .authorised
+            }
+        }
+    }
+
+    /// Sends only the picture on this screen: the backend's plain copy with the cover flattened onto it.
+    /// This screen never holds the photo from the phone or the sealed file. A failure does not change "Authorised".
+    private func sendPicture() {
+        guard let picture, let pictureToken else { return }
+        sending = .sending
+        let base = AuthoriseLink.base(fromSettings: webAddress)
+        Task {
+            let jpeg = await Task.detached(priority: .userInitiated) { PictureUpload.jpeg(from: picture) }.value
+            if let jpeg, await PictureUpload.send(jpeg, base: base, hash: result.hash, token: pictureToken) {
+                sending = .none
+            } else {
+                sending = .failed
             }
         }
     }
