@@ -108,11 +108,14 @@ export function isAddress(value: unknown): value is string {
   return typeof value === "string" && /^0x[0-9a-fA-F]{40}$/.test(value);
 }
 
-/** A label someone may choose: 3 to 20 lowercase letters, digits and dashes, not one of ours. */
+/**
+ * A label someone may choose: 3 to 20 lowercase letters, digits and dashes, not one of ours, and
+ * no "--" as its third and fourth characters, which ENS names keep for encoded labels.
+ */
 export function isLabel(value: unknown): value is string {
   return (
     typeof value === "string" &&
-    /^[a-z0-9][a-z0-9-]{2,19}$/.test(value) &&
+    /^(?!..--)[a-z0-9][a-z0-9-]{2,19}$/.test(value) &&
     !RESERVED_LABELS.has(value)
   );
 }
@@ -222,9 +225,9 @@ export type EventSeal = { hash: string; pass: string; at: string };
 
 export const EVENT_LIST_LIMIT = 500;
 
-/** An event is named by a short slug: lowercase letters, digits and dashes. */
+/** An event is named by a short slug: lowercase letters, digits and dashes, no "--" at 3 and 4. */
 export function isEvent(value: unknown): value is string {
-  return typeof value === "string" && /^[a-z0-9][a-z0-9-]{2,39}$/.test(value);
+  return typeof value === "string" && /^(?!..--)[a-z0-9][a-z0-9-]{2,39}$/.test(value);
 }
 
 /** Oldest first, then by hash so the order never wobbles; at most EVENT_LIST_LIMIT. */

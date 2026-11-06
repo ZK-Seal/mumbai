@@ -36,6 +36,7 @@ function labelProblem(label: string): string | null {
   if (label.length > 20) return "At most 20 characters.";
   if (!/^[a-z0-9-]+$/.test(label)) return "Only lowercase letters, digits and dashes.";
   if (label.startsWith("-")) return "Starts with a letter or a digit.";
+  if (label.slice(2, 4) === "--") return "No two dashes as the third and fourth characters.";
   if (RESERVED.has(label)) return "This name is kept for the site.";
   return null;
 }
@@ -44,7 +45,7 @@ function labelProblem(label: string): string | null {
 function readRegistered(answer: unknown): Registered | null {
   const a = answer as { state?: unknown; name?: unknown; address?: unknown; ens?: unknown } | null;
   if (a?.state !== "registered" || typeof a.name !== "string") return null;
-  if (!/^[a-z0-9][a-z0-9-]{2,19}\.[a-z0-9.-]{3,200}$/.test(a.name)) return null;
+  if (!/^(?!..--)[a-z0-9][a-z0-9-]{2,19}\.[a-z0-9.-]{3,200}$/.test(a.name)) return null;
   const ens = a.ens === "done" ? "done" : a.ens === "pending" ? "pending" : null;
   if (ens === null) return null;
   const address =
