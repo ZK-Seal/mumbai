@@ -200,8 +200,8 @@ export type Vouch = "vouched" | "not-vouched" | "unreachable";
 
 /**
  * Whether the desk vouches for this name on this authorisation: the name must be a member now,
- * and its pass record must be this authorisation's pass, or its account record the account that
- * is signed in (when sign-in is set up and there is one).
+ * and its pass record must be this authorisation's pass, or its account record the account
+ * given (callers now give none).
  */
 export async function vouch(
   client: PublicClient,

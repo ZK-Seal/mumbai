@@ -8,7 +8,7 @@ import { isSealHash } from "@/lib/world";
 
 /**
  * One authorised seal. `pass` is the person's pass number; one person may authorise many seals.
- * `account` is a short name for the World account that was signed in, when sign-in is set up.
+ * `account` is no longer filled in and is kept as null; older records may still carry one.
  * `name` is the person's name at a desk, kept only when the desk vouched for it at the time.
  * `event` is the event the photo was sealed at, when the link named one.
  */
@@ -89,7 +89,7 @@ export class StoreError extends Error {
   }
 }
 
-/** An account name, as the sign-in keeps it: 16 lowercase hex characters. */
+/** An account name, as older records keep it: 16 lowercase hex characters. */
 export function isAccount(value: unknown): value is string {
   return typeof value === "string" && /^[0-9a-f]{16}$/.test(value);
 }

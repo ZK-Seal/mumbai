@@ -160,10 +160,6 @@ button:focus-visible {
   }
 }
 
-.signin {
-  margin: 0 0 1.5rem;
-}
-
 .actions {
   display: flex;
   flex-wrap: wrap;
