@@ -9,6 +9,8 @@ final class WorldStep {
         /// The token comes only with the answer that made the record, and it lets the app send the picture once it has one.
         case authorised(pictureToken: String?)
         case notAuthorised
+        /// World's own error word, from its fixed list.
+        case worldFailed(String)
         /// The web side could not be read, or the World app could not be opened, so the sheet takes over.
         case useSheet
     }
@@ -61,7 +63,12 @@ final class WorldStep {
             asking.cancel()
             return .useSheet
         }
-        guard case .success(let result) = await asking.value, let json = try? idkitResultToJson(result: result) else { return .notAuthorised }
+        let result: IDKitResult
+        switch await asking.value {
+        case .success(let proof): result = proof
+        case .failure(let code): return .worldFailed(code.rawValue)
+        }
+        guard let json = try? idkitResultToJson(result: result) else { return .notAuthorised }
         let finish: Finish? = await post(base, "/api/world/verify", body(hash: hash, event: event, result: json), limit: 60)
         // This answer is trusted as it is. A second call could miss a fresh record.
         if let finish { return finish.state == "verified" ? .authorised(pictureToken: finish.token) : .notAuthorised }
@@ -86,7 +93,8 @@ final class WorldStep {
         default: return nil
         }
         // The return link only brings the person back. The result comes by asking, and the app trusts nothing in that link.
-        let config = IDKitRequestConfig(appId: appID, action: action, rpContext: rp, allowLegacyProofs: false,
+        // The same rule as the web page. The sandbox answers a human check only with an older proof.
+        let config = IDKitRequestConfig(appId: appID, action: action, rpContext: rp, allowLegacyProofs: credential == "human",
                                         returnTo: "\(AuthoriseLink.returnScheme)://authorised", environment: place)
         let preset: Preset = credential == "human" ? .proofOfHuman(signal: hash) : .selfieCheck(signal: hash)
         // This call waits on the network, so it runs away from the screen's thread.

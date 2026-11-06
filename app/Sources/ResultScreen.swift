@@ -33,6 +33,7 @@ struct ResultScreen: View {
     @State private var sheet = AuthoriseSheet()
     @State private var world = WorldStep()
     @State private var authorising = Authorising.notYet
+    @State private var failureWord: String?
     @State private var pictureToken: String?
     @State private var sending = Sending.none
     @State private var picture: UIImage?
@@ -97,7 +98,7 @@ struct ResultScreen: View {
                         .buttonStyle(.borderedProminent)
                         .controlSize(.large)
                         if authorising == .notAuthorised {
-                            Text("Not authorised")
+                            Text(failureWord.map { "Not authorised: \($0)" } ?? "Not authorised")
                                 .font(Theme.text(15))
                                 .frame(maxWidth: .infinity)
                                 .accessibilityIdentifier("notAuthorised")
@@ -124,6 +125,7 @@ struct ResultScreen: View {
     /// The page's way back is only a hint. The word shows only after the web side answers with a record for this seal.
     private func authorise(_ link: URL) {
         authorising = .waiting
+        failureWord = nil
         let base = AuthoriseLink.base(fromSettings: webAddress)
         Task {
             switch await world.run(base: base, hash: result.hash, event: AuthoriseLink.event(fromSettings: event)) {
@@ -132,6 +134,9 @@ struct ResultScreen: View {
                 pictureToken = token
                 sendPicture()
             case .notAuthorised:
+                authorising = .notAuthorised
+            case .worldFailed(let word):
+                failureWord = word
                 authorising = .notAuthorised
             case .useSheet:
                 let back = await sheet.open(link)
