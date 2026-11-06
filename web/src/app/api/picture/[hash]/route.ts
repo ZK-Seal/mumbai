@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { after } from "next/server";
-import { nameImage } from "@/lib/naming";
+import { createUserName, nameImage, userEns } from "@/lib/naming";
 import {
   PICTURE_MAX_BYTES,
   PICTURE_MIN_BYTES,
@@ -141,18 +141,26 @@ export async function POST(request: Request, { params }: { params: Promise<{ has
 
 /**
  * Names the photo on chain after the answer is sent, when the seal is at an event, its person has
- * a user name, and the photo has no name yet. A store that cannot be read now is left for later.
+ * a user name, and the photo has no name yet. A store that cannot be read now is left for later,
+ * and so is a name that cannot be created now: posting again tries it again.
  */
 async function nameLater(record: SealRecord, picture: PictureRecord): Promise<void> {
   if (record.event === null) return;
+  let user;
   try {
-    const [user, named] = await Promise.all([
+    const [found, named] = await Promise.all([
       records().userByPass(record.pass),
       records().getName(record.hash),
     ]);
-    if (!user || named) return;
+    if (!found || named) return;
+    user = found;
   } catch {
     return;
   }
-  after(() => nameImage(record, picture.ref));
+  // A photo named before its person's name is on chain would fail, so that name is asked for
+  // first: both writes wait their turn, so the photo's goes out once the person's has landed.
+  after(async () => {
+    if ((await userEns(user.label)) === "pending") await createUserName(user.label, user.pass);
+    await nameImage(record, picture.ref);
+  });
 }
