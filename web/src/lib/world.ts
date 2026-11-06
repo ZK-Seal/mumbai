@@ -158,17 +158,34 @@ export async function worldAccepts(
     return false;
   }
   const where = `action=${action} env=${config.environment}`;
-  let response: Response;
-  try {
-    response = await fetch(`https://developer.world.org/api/v4/verify/${config.rpId}`, {
+  const ask = () =>
+    fetch(`https://developer.world.org/api/v4/verify/${config.rpId}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(result),
       signal: AbortSignal.timeout(15000),
     });
-  } catch (error) {
-    console.log(`world: verify unreachable ${clip((error as Error)?.name ?? error)} ${where}`);
-    return false;
+  const cause = (error: unknown) => {
+    const e = error as { name?: unknown; cause?: { code?: unknown } };
+    return clip(e?.cause?.code ?? e?.name ?? error);
+  };
+  let response: Response;
+  try {
+    response = await ask();
+  } catch (first) {
+    // A connection dropped before an answer (ECONNRESET on a weak network) is asked once more;
+    // a request that ran out of time is not, so the whole check stays near 15 s.
+    if ((first as Error)?.name === "TimeoutError") {
+      console.log(`world: verify unreachable ${cause(first)} ${where}`);
+      return false;
+    }
+    console.log(`world: verify unreachable ${cause(first)}, asking again ${where}`);
+    try {
+      response = await ask();
+    } catch (error) {
+      console.log(`world: verify unreachable ${cause(error)} ${where}`);
+      return false;
+    }
   }
   const answer = (await response.json().catch(() => null)) as
     | ({ success?: unknown; environment?: unknown; action?: unknown } & WorldError)
