@@ -7,7 +7,7 @@
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0e1626">
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f8f7f3">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src blob: data:; font-src data:; connect-src https://rpc.rabdi.db-chain.testnet.arkiv.network https://download.gateway.ethswarm.org https://bzz.limo; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src blob: data:; font-src data:; connect-src https://rpc.rabdi.db-chain.testnet.arkiv.network https://download.gateway.ethswarm.org https://bzz.limo https://ethereum-rpc.publicnode.com; base-uri 'none'; form-action 'none'">
 <title>A decentralized index of proven photos</title>
 <link rel="icon" href="data:,">
 <style>
@@ -217,6 +217,7 @@
     background: var(--surface);
   }
   .row { display: flex; flex-wrap: wrap; align-items: center; gap: 0 8px; min-height: 48px; }
+  .chain { color: var(--accent); font-size: 12px; }
   .name, .to {
     min-width: 0;
     min-height: 44px;
@@ -333,7 +334,7 @@
 <script>
 'use strict';
 
-// The top of the tree when the page is not opened through an ENS name. Only a name with an owner on mainnet goes here. This page reads records, not the chain.
+// The top of the tree when the page is not opened through an ENS name. Only a name with an owner on mainnet goes here. This page reads records. It asks the chain only for the "on chain" mark.
 const ROOT_NAME = 'zk-seal.eth';
 // Opened through an ENS name, by any gateway, the page names the root it was opened under.
 const rootInHost = /(?:^|\.)([a-z0-9-]+\.eth)(?:\.|$)/.exec(window.location.hostname);
@@ -842,6 +843,7 @@ function loadedFrame(photo, label) {
 function factsOf(photo) {
   const facts = make('dl', 'facts');
   if (photo.imageName) fact(facts, 'Name', photo.imageName, 'code');
+  if (onChain.has(photo.imageName)) fact(facts, 'ENS', 'On chain, read from mainnet');
   fact(facts, 'Seal hash', photo.record.hash, 'code');
   if (photo.person.unnamed) fact(facts, 'Person', rows.users ? 'unnamed' : 'not read yet');
   else fact(facts, 'Person', lightsWith(button('name', photo.person.label, () => light(photo.person)), photo.person));
@@ -850,14 +852,16 @@ function factsOf(photo) {
 }
 
 const labelOf = (state) => state.photo.imageName || 'Photo ' + state.position;
-const signOf = (photo) => [photo.imageName, photo.person.label, photo.person.address, photo.pointer && photo.pointer.ref,
+const signOf = (photo) => [photo.imageName, onChain.has(photo.imageName), photo.person.label, photo.person.address, photo.pointer && photo.pointer.ref,
   Boolean(rows.users), Boolean(rows.pointers), Boolean(rows.names)].join('|');
 
 // One image's row. The picture from Swarm, its seal hash and its person open under it, and load only when first opened.
 function drawImageRow(state) {
   const { photo, item } = state;
   const short = shortImage(photo.imageName);
-  const open = button('name' + (short ? '' : ' none'), short || (rows.names ? 'No name yet' : 'Not read yet'), () => {
+  // In a person's list the same short name can come from two events, so the event is said.
+  const place = state.withEvent ? ' · ' + photo.record.event : '';
+  const open = button('name' + (short ? '' : ' none'), (short || (rows.names ? 'No name yet' : 'Not read yet')) + place, () => {
     let panel = item.querySelector('.panel');
     if (!panel) {
       panel = make('div', 'panel');
@@ -872,7 +876,9 @@ function drawImageRow(state) {
   const panelNow = item.querySelector('.panel');
   open.setAttribute('aria-expanded', String(Boolean(panelNow && !panelNow.hidden)));
   const row = make('div', 'row');
-  row.append(lightsWith(open, photo.person), toOwner(photo.person));
+  row.append(lightsWith(open, photo.person));
+  if (onChain.has(photo.imageName)) row.append(make('span', 'chain', 'on chain'));
+  row.append(toOwner(photo.person));
   const old = item.querySelector('.row');
   if (old) old.replaceWith(row);
   else item.append(row);
@@ -895,14 +901,16 @@ function updateImage(state, photo) {
 
 // One list for each event seen, kept, so an open picture stays open while the tree updates.
 const eventViews = new Map();
+const personViews = new Map();
 let currentEvent = null;
+let currentPerson = null;
 
-function updateEventView(slug, photos) {
-  let view = eventViews.get(slug);
+function updateView(views, key, photos, withEvent) {
+  let view = views.get(key);
   const first = !view;
   if (first) {
     view = { list: make('ul', 'branch'), states: new Map() };
-    eventViews.set(slug, view);
+    views.set(key, view);
   }
   photos.forEach((photo, index) => {
     const known = view.states.get(photo.record.hash);
@@ -910,12 +918,28 @@ function updateEventView(slug, photos) {
       if (known.sign !== signOf(photo)) updateImage(known, photo);
       return;
     }
-    const state = { photo, position: index + 1, sign: signOf(photo), item: make('li', first ? '' : 'fresh') };
+    const state = { photo, position: index + 1, sign: signOf(photo), item: make('li', first ? '' : 'fresh'), withEvent };
     drawImageRow(state);
     view.states.set(photo.record.hash, state);
     view.list.append(state.item);
   });
   return view;
+}
+
+const updateEventView = (slug, photos) => updateView(eventViews, slug, photos, false);
+const photosOfPerson = (person) => [...latest.events.values()].flat().filter((photo) => photo.person.owner === person.owner);
+
+function updatePersonView(person) {
+  const photos = photosOfPerson(person);
+  const view = updateView(personViews, person.owner, photos, true);
+  if (!view.none) view.none = make('p', 'note', 'No photos yet.');
+  view.none.hidden = photos.length > 0;
+  return view;
+}
+
+// The entry now open on either branch.
+function selectEntry(entry) {
+  for (const other of ui.tree.querySelectorAll('button.entry')) other.setAttribute('aria-current', String(other === entry));
 }
 
 // One entry on a branch. A name with no record is plain text and cannot be tapped, so it never looks real.
@@ -945,9 +969,14 @@ function usersLimb(people, known) {
       list.append(absentEntry(label, known ? 'not yet' : 'not read'));
       continue;
     }
-    const sub = person.address ? shortAddress(person.address) : 'no address yet';
-    const entry = realEntry(label, sub, person.address ? 'code' : '', () => light(person));
-    if (person.address) entry.setAttribute('aria-label', label + ', address ' + person.address + ', by our records');
+    const marked = onChain.has(person.name);
+    const sub = (person.address ? shortAddress(person.address) : 'no address yet') + (marked ? ' · on chain' : '');
+    const entry = realEntry(label, sub, person.address ? 'code' : '', () => {
+      selectEntry(entry);
+      openPerson(person);
+    });
+    entry.setAttribute('aria-current', String(Boolean(currentPerson) && currentPerson.owner === person.owner));
+    if (person.address) entry.setAttribute('aria-label', label + ', address ' + person.address + ', by our records' + (marked ? ', on chain' : ''));
     const item = make('li', '');
     item.append(lightsWith(entry, person));
     list.append(item);
@@ -961,19 +990,19 @@ function eventsLimb(events, complete) {
   limb.append(make('h2', '', 'Events'));
   const list = make('ul', 'branch');
   const slugs = [...EVENTS, ...[...events.keys()].filter((slug) => !EVENTS.includes(slug))];
-  const entries = [];
   for (const slug of slugs) {
     const photos = events.get(slug);
     if (!photos || photos.length === 0) {
       list.append(absentEntry(slug, 'not yet'));
       continue;
     }
-    const entry = realEntry(slug, countLine(photos, complete), '', () => {
-      for (const other of entries) other.setAttribute('aria-current', String(other === entry));
+    // A picture's name on chain means its event's name is on chain too.
+    const marked = photos.some((photo) => onChain.has(photo.imageName));
+    const entry = realEntry(slug, countLine(photos, complete) + (marked ? ' · on chain' : ''), '', () => {
+      selectEntry(entry);
       openEvent(slug);
     });
-    entry.setAttribute('aria-current', String(slug === currentEvent));
-    entries.push(entry);
+    entry.setAttribute('aria-current', String(!currentPerson && slug === currentEvent));
     const item = make('li', '');
     item.append(entry);
     list.append(item);
@@ -982,23 +1011,207 @@ function eventsLimb(events, complete) {
   return limb;
 }
 
+// The "on chain" mark asks ENS on mainnet, from this browser, through the Universal Resolver.
+// It only ever adds a mark. If it cannot read, the page stays as it is and says nothing.
+const ENS_RPC_URL = 'https://ethereum-rpc.publicnode.com';
+const UNIVERSAL_RESOLVER = '0xeeeeeeee14d718c2b47d9923deab1335e144eeee';
+const ENS_TIMEOUT_MS = 10000;
+const ENS_NAMES_AT_ONCE = 24;
+const ENS_ASK_AGAIN_MS = 120000;
+const ENS_AFTER_TROUBLE_MS = 300000;
+// The known hash of the name "eth". If our hash does not give it, no mark is ever shown.
+const ETH_NODE = '93cdeb708b7545dc668eb9280176169d1c33cfd8ed6f04690a0bcc88a93fc4ae';
+
+// Keccak-256, which ENS hashes names with. Browsers do not have it.
+const KECCAK_ROUNDS = [0x1n, 0x8082n, 0x800000000000808an, 0x8000000080008000n, 0x808bn, 0x80000001n, 0x8000000080008081n, 0x8000000000008009n,
+  0x8an, 0x88n, 0x80008009n, 0x8000000an, 0x8000808bn, 0x800000000000008bn, 0x8000000000008089n, 0x8000000000008003n,
+  0x8000000000008002n, 0x8000000000000080n, 0x800an, 0x800000008000000an, 0x8000000080008081n, 0x8000000000008080n, 0x80000001n, 0x8000000080008008n];
+const KECCAK_TURNS = [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 2, 14, 27, 41, 56, 8, 25, 43, 62, 18, 39, 61, 20, 44];
+const KECCAK_PLACES = [10, 7, 11, 17, 18, 3, 5, 16, 8, 21, 24, 4, 15, 23, 19, 13, 12, 2, 20, 14, 22, 9, 6, 1];
+const LANE = (1n << 64n) - 1n;
+const turned = (lane, by) => ((lane << BigInt(by)) | (lane >> BigInt(64 - by))) & LANE;
+
+function keccakRounds(state) {
+  const column = new Array(5);
+  for (const round of KECCAK_ROUNDS) {
+    for (let i = 0; i < 5; i += 1) column[i] = state[i] ^ state[i + 5] ^ state[i + 10] ^ state[i + 15] ^ state[i + 20];
+    for (let i = 0; i < 5; i += 1) {
+      const mix = column[(i + 4) % 5] ^ turned(column[(i + 1) % 5], 1);
+      for (let j = 0; j < 25; j += 5) state[j + i] ^= mix;
+    }
+    let moving = state[1];
+    KECCAK_PLACES.forEach((place, i) => {
+      const next = state[place];
+      state[place] = turned(moving, KECCAK_TURNS[i]);
+      moving = next;
+    });
+    for (let j = 0; j < 25; j += 5) {
+      for (let i = 0; i < 5; i += 1) column[i] = state[j + i];
+      for (let i = 0; i < 5; i += 1) state[j + i] ^= (column[(i + 1) % 5] ^ LANE) & column[(i + 2) % 5];
+    }
+    state[0] ^= round;
+  }
+}
+
+function keccak256(bytes) {
+  const rate = 136;
+  const padded = new Uint8Array((Math.floor(bytes.length / rate) + 1) * rate);
+  padded.set(bytes);
+  padded[bytes.length] ^= 0x01;
+  padded[padded.length - 1] ^= 0x80;
+  const state = new Array(25).fill(0n);
+  for (let start = 0; start < padded.length; start += rate) {
+    for (let lane = 0; lane < rate / 8; lane += 1) {
+      let value = 0n;
+      for (let b = 7; b >= 0; b -= 1) value = (value << 8n) | BigInt(padded[start + lane * 8 + b]);
+      state[lane] ^= value;
+    }
+    keccakRounds(state);
+  }
+  const out = new Uint8Array(32);
+  for (let i = 0; i < 32; i += 1) out[i] = Number((state[i >> 3] >> BigInt((i & 7) * 8)) & 0xffn);
+  return out;
+}
+
+const utf8 = (text) => new TextEncoder().encode(text);
+const hexOf = (bytes) => Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+const word = (number) => number.toString(16).padStart(64, '0');
+const withLength = (hex) => word(hex.length / 2) + hex + '0'.repeat((64 - (hex.length % 64)) % 64);
+
+function nameNode(name) {
+  let node = new Uint8Array(32);
+  for (const label of name.split('.').reverse()) {
+    const joined = new Uint8Array(64);
+    joined.set(node);
+    joined.set(keccak256(utf8(label)), 32);
+    node = keccak256(joined);
+  }
+  return hexOf(node);
+}
+
+// The name as ENS sends it: each label after its length. Null if a label cannot be sent.
+function dnsName(name) {
+  let hex = '';
+  for (const label of name.split('.')) {
+    const bytes = utf8(label);
+    if (bytes.length === 0 || bytes.length > 255) return null;
+    hex += bytes.length.toString(16).padStart(2, '0') + hexOf(bytes);
+  }
+  return hex + '00';
+}
+
+// The bytes at one place in an answer, or null if they are not there.
+function bytesAt(hex, place) {
+  const start = parseInt(hex.slice(place * 64, place * 64 + 64), 16) * 2;
+  const length = parseInt(hex.slice(start, start + 64), 16) * 2;
+  if (Number.isNaN(start) || Number.isNaN(length) || start + 64 + length > hex.length) return null;
+  return hex.slice(start + 64, start + 64 + length);
+}
+
+// One question to the Universal Resolver: resolve(bytes name, bytes data). A name that does not resolve gives null. A failed read throws.
+async function askEns(name, question) {
+  const dns = dnsName(name);
+  if (dns === null) return null;
+  const first = withLength(dns);
+  const body = JSON.stringify({
+    jsonrpc: '2.0',
+    id: 1,
+    method: 'eth_call',
+    params: [{ to: UNIVERSAL_RESOLVER, data: '0x9061b923' + word(64) + word(64 + first.length / 2) + first + withLength(question) }, 'latest'],
+  });
+  return withTimeout(ENS_TIMEOUT_MS, async (signal) => {
+    const response = await fetch(ENS_RPC_URL, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body,
+      signal,
+      credentials: 'omit',
+    });
+    if (!response.ok) throw new Error('ENS could not be read.');
+    const answer = await response.json();
+    if (answer && answer.error) return null;
+    if (!answer || typeof answer.result !== 'string') throw new Error('ENS could not be read.');
+    const out = bytesAt(answer.result.slice(2), 0);
+    return out === null ? null : bytesAt(out, 0);
+  });
+}
+
+// A name that was never registered can still answer through its parent's resolver, so only the exact record counts:
+// a person's address, or a picture's seal hash under the root's own key.
+async function nameHolds(check) {
+  const node = nameNode(check.name);
+  if (check.seal) {
+    const key = check.name.split('.').slice(-2).reverse().join('.') + '.seal';
+    const found = await askEns(check.name, '59d1d43c' + node + word(64) + withLength(hexOf(utf8(key))));
+    return found === hexOf(utf8(check.seal));
+  }
+  const found = await askEns(check.name, 'f1cb7e06' + node + word(60));
+  if (found === null || found.length !== 40 || /^0+$/.test(found)) return false;
+  return !check.address || found === check.address.slice(2).toLowerCase();
+}
+
+const onChain = new Set();
+const ensAsked = new Map();
+let ensBusy = false;
+let ensPausedUntil = 0;
+let ensHashIsRight = null;
+
+// Asks about names not yet marked, one at a time. A failed read waits, and nothing shows.
+async function readMarks(checks, linked) {
+  if (ensBusy || Date.now() < ensPausedUntil) return;
+  if (ensHashIsRight === null) ensHashIsRight = nameNode('eth') === ETH_NODE;
+  if (!ensHashIsRight) return;
+  const now = Date.now();
+  const due = checks.filter((check) => !onChain.has(check.name) && now - (ensAsked.get(check.name) || 0) >= ENS_ASK_AGAIN_MS).slice(0, ENS_NAMES_AT_ONCE);
+  if (due.length === 0) return;
+  ensBusy = true;
+  let found = false;
+  try {
+    for (const check of due) {
+      ensAsked.set(check.name, Date.now());
+      if (await nameHolds(check)) {
+        onChain.add(check.name);
+        found = true;
+      }
+    }
+  } catch {
+    ensPausedUntil = Date.now() + ENS_AFTER_TROUBLE_MS;
+  } finally {
+    ensBusy = false;
+  }
+  if (found) draw(linked);
+}
+
 // What was last read and drawn.
 const rows = { records: null, pointers: null, names: null, users: null };
 let latest = null;
 let limbsSign = null;
 
 function showCount() {
-  const photos = latest.events.get(currentEvent) || [];
+  const photos = currentPerson ? photosOfPerson(currentPerson) : latest.events.get(currentEvent) || [];
   ui.count.textContent = photos.length ? countLine(photos, latest.complete) : '';
-  ui.event.textContent = currentEvent;
+  ui.event.textContent = currentPerson ? currentPerson.label : currentEvent;
 }
 
 // The event on top, and its images under the tree.
 function openEvent(slug) {
   currentEvent = slug;
+  currentPerson = null;
   showCount();
   const view = updateEventView(slug, latest.events.get(slug) || []);
   ui.images.replaceChildren(make('h2', '', slug), view.list);
+  ui.images.hidden = false;
+  paintLit();
+}
+
+// A person's images, from every event, in the same place.
+function openPerson(person) {
+  if (litOwner !== null) light(null);
+  currentPerson = person;
+  currentEvent = null;
+  showCount();
+  const view = updatePersonView(person);
+  ui.images.replaceChildren(make('h2', '', person.label), view.none, view.list);
   ui.images.hidden = false;
   paintLit();
 }
@@ -1032,6 +1245,7 @@ function draw(linked) {
   // The listed events, and any other event found in a real row. A trial shows only if the link or the name asks for it.
   const events = new Map([...model.events].filter(([slug]) => !slug.startsWith(TRIAL_EVENT) || slug === linked));
   latest = { events, complete: rows.records.complete };
+  if (currentPerson) currentPerson = model.named.find((person) => person.owner === currentPerson.owner) || currentPerson;
   namesOf = new Map();
   for (const person of model.named) addName(person.owner, person.label);
   for (const photos of events.values()) {
@@ -1046,6 +1260,8 @@ function draw(linked) {
     model.named.map((person) => [person.label, person.address]),
     [...events].map(([slug, photos]) => [slug, countLine(photos, latest.complete)]),
     currentEvent,
+    currentPerson && currentPerson.owner,
+    onChain.size,
   ]);
   if (sign !== limbsSign) {
     limbsSign = sign;
@@ -1054,7 +1270,10 @@ function draw(linked) {
   for (const [slug, view] of eventViews) {
     if (view) updateEventView(slug, events.get(slug) || []);
   }
-  if (currentEvent) {
+  for (const person of model.named) {
+    if (personViews.has(person.owner)) updatePersonView(person);
+  }
+  if (currentEvent || currentPerson) {
     showCount();
   } else {
     const withPhotos = [...EVENTS, ...events.keys()].filter((slug) => (events.get(slug) || []).length > 0);
@@ -1067,6 +1286,16 @@ function draw(linked) {
   }
   paintLit();
   paintMany();
+  const checks = [];
+  for (const person of model.named) {
+    if (person.name) checks.push({ name: person.name, address: person.address });
+  }
+  for (const photos of events.values()) {
+    for (const photo of photos) {
+      if (photo.imageName) checks.push({ name: photo.imageName, seal: photo.record.hash });
+    }
+  }
+  readMarks(checks, linked).catch(() => {});
 }
 
 let reading = false;
