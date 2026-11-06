@@ -2,7 +2,7 @@ import SwiftUI
 
 /// The person's short name. World proves one human, and the web side makes the name and finishes it in the background.
 struct NameScreen: View {
-    /// Set when this step comes before authorising. It then offers a way on.
+    /// Set when this step comes from Publish. The step closes once the name is there, and Publish goes on.
     var onClose: (() -> Void)?
 
     @AppStorage("webAddress") private var webAddress = ""
@@ -18,7 +18,7 @@ struct NameScreen: View {
     var body: some View {
         Form {
             Section {
-                TextField("Your name", text: $label)
+                TextField("Nickname", text: $label)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .disabled(working)
@@ -50,9 +50,6 @@ struct NameScreen: View {
                         Text("name being created")
                             .foregroundStyle(Theme.muted)
                     }
-                    if let onClose {
-                        Button("Continue") { onClose() }
-                    }
                 }
                 .listRowBackground(Theme.surface)
             }
@@ -60,7 +57,7 @@ struct NameScreen: View {
         .font(Theme.text(15))
         .scrollContentBackground(.hidden)
         .background(Theme.background)
-        .navigationTitle("Your name")
+        .navigationTitle("Your nickname")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if let onClose {
@@ -95,6 +92,7 @@ struct NameScreen: View {
                 userNameState = state
                 userName = name
                 label = ""
+                onClose?()
             case .refused(let word):
                 line = Names.sentence(forRefusal: word)
             case .worldFailed(let word):
@@ -127,19 +125,14 @@ struct NameScreen: View {
         userNameState = found.state
         userName = found.name
         label = ""
+        onClose?()
     }
 
     /// Asks until the name is finished. It takes a while on the chain, so this goes on only while the screen is open.
     private func watchName() async {
         guard userNameState == "pending", let label = Names.label(of: userName) else { return }
-        let base = AuthoriseLink.base(fromSettings: webAddress)
-        for _ in 0..<60 {
-            if let found = await Names.listing(base: base, label: label), found.state != "pending" {
-                userNameState = found.state
-                return
-            }
-            try? await Task.sleep(nanoseconds: 5_000_000_000)
-            if Task.isCancelled { return }
+        if let state = await Names.waitForName(base: AuthoriseLink.base(fromSettings: webAddress), label: label) {
+            userNameState = state
         }
     }
 }

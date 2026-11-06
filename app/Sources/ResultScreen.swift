@@ -36,8 +36,8 @@ struct ResultScreen: View {
     @AppStorage("cover") private var cover = Cover.mask
     @AppStorage("event") private var event = ""
     @AppStorage("userName") private var userName = ""
+    @AppStorage("userNameState") private var userNameState = ""
     @AppStorage("userSession") private var userSession = ""
-    @AppStorage("nameStepShown") private var nameStepShown = false
     /// The SHA-256 of the badge scanned for one event. The code itself is never kept.
     @AppStorage("entryHash") private var entryHash = ""
     @AppStorage("entryEvent") private var entryEvent = ""
@@ -76,6 +76,14 @@ struct ResultScreen: View {
                     ProgressView()
                         .frame(maxWidth: .infinity)
                 }
+                Button { onDone() } label: {
+                    Text("Start over")
+                        .font(Theme.text(15, .medium))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 4)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
                 if picture != nil, let link = AuthoriseLink.url(base: AuthoriseLink.base(fromSettings: webAddress), hash: result.hash,
                                                                 edit: "blank", width: width, height: height,
                                                                 event: AuthoriseLink.event(fromSettings: event)) {
@@ -122,11 +130,12 @@ struct ResultScreen: View {
                         ProgressView()
                             .frame(maxWidth: .infinity)
                     case .notYet, .notAuthorised:
-                        Button { pressAuthorise(link) } label: {
-                            Theme.mainLabel(Text("Authorise this seal"))
+                        Button { pressPublish(link) } label: {
+                            Theme.mainLabel(Text("Publish on \(Names.root)"))
                         }
                         .buttonStyle(.borderedProminent)
                         .controlSize(.large)
+                        .accessibilityIdentifier("publish")
                         if authorising == .notAuthorised {
                             Text(failureWord.map { "Not authorised: \($0)" } ?? "Not authorised")
                                 .font(Theme.text(15))
@@ -134,19 +143,22 @@ struct ResultScreen: View {
                                 .accessibilityIdentifier("notAuthorised")
                         }
                     }
+                    // The name the web side gave, as it gave it.
+                    if authorising != .notYet, !userName.isEmpty {
+                        Text(userNameState == "pending" ? "\(userName): being created" : userName)
+                            .font(Theme.text(14))
+                            .foregroundStyle(Theme.muted)
+                            .multilineTextAlignment(.center)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity)
+                            .accessibilityIdentifier("userName")
+                    }
                 }
-                Button { onDone() } label: {
-                    Text("Start over")
-                        .font(Theme.text(15, .medium))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 4)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.large)
             }
             .padding(16)
         }
         .task { await load() }
+        .task(id: userName) { await watchUserName() }
         .onDisappear {
             world.stop()
             imageWatch?.cancel()
@@ -166,7 +178,8 @@ struct ResultScreen: View {
         .sheet(isPresented: $showNameStep, onDismiss: {
             if let link = afterName {
                 afterName = nil
-                goOn(link)
+                // Closed with no name: back to the button, and nothing is sent.
+                if !userName.isEmpty { goOn(link) }
             }
         }) {
             NavigationStack {
@@ -183,7 +196,7 @@ struct ResultScreen: View {
         return entryHash
     }
 
-    /// A photo going to an event needs a badge scanned for it first. Closing the camera goes back to the button.
+    /// A photo going to an event needs a badge scanned for it first, before its World step. Closing the camera goes back to the button.
     private func goOn(_ link: URL) {
         guard AuthoriseLink.event(fromSettings: event) != nil, entryNow == nil else {
             authorise(link)
@@ -193,13 +206,12 @@ struct ResultScreen: View {
         showScan = true
     }
 
-    /// The name step comes once, before the first authorising, if no name is saved. Closing it goes on to authorise.
-    private func pressAuthorise(_ link: URL) {
-        guard userName.isEmpty, !nameStepShown else {
+    /// Publish, in this order: the nickname and its World step if the person has no name yet, then the badge if the event needs one, then the photo's World step.
+    private func pressPublish(_ link: URL) {
+        guard userName.isEmpty else {
             goOn(link)
             return
         }
-        nameStepShown = true
         afterName = link
         showNameStep = true
     }
@@ -261,6 +273,14 @@ struct ResultScreen: View {
             } else {
                 sending = .failed
             }
+        }
+    }
+
+    /// The web side finishes a waiting name when it is asked, so this asks while the screen is open.
+    private func watchUserName() async {
+        guard userNameState == "pending", let label = Names.label(of: userName) else { return }
+        if let state = await Names.waitForName(base: AuthoriseLink.base(fromSettings: webAddress), label: label) {
+            userNameState = state
         }
     }
 

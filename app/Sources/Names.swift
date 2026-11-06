@@ -22,6 +22,9 @@ struct NameState: Decodable {
 
 /// The short names people choose, and the ENS names the web side makes. These answers are public, so no access word goes with them.
 enum Names {
+    /// The root name on the Publish button. Change it here only. The names themselves always come from the web side.
+    static let root = "zk-seal.eth"
+
     /// 3 to 20 lowercase letters, digits and hyphens, with no hyphen first.
     static func isLabel(_ text: String) -> Bool {
         text.range(of: #"^[a-z0-9][a-z0-9-]{2,19}\z"#, options: .regularExpression) != nil
@@ -52,6 +55,16 @@ enum Names {
         guard let answer: Answer = await read(base: base, path: "/api/user/\(label)"), answer.state == "listed",
               let name = answer.name, isName(name) else { return nil }
         return (name, answer.ens?.state ?? "pending")
+    }
+
+    /// Asks until a person's name is finished, and gives its state then. Nil if it did not finish while this was asking.
+    static func waitForName(base: String, label: String) async -> String? {
+        for _ in 0..<60 {
+            if let found = await listing(base: base, label: label), found.state != "pending" { return found.state }
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            if Task.isCancelled { return nil }
+        }
+        return nil
     }
 
     /// The label in the join page's way back: blankdemo://authorised?state=joined&label=<label>
