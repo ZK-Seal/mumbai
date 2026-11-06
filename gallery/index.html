@@ -60,18 +60,19 @@
     min-height: 100vh;
     display: flex;
     flex-direction: column;
+    justify-content: center;
     background: var(--bg);
     color: var(--ink);
     font: 400 16px/1.45 var(--text);
   }
-  main, footer {
+  main {
     width: 100%;
     max-width: 640px;
     margin: 0 auto;
     padding-left: max(16px, env(safe-area-inset-left));
     padding-right: max(16px, env(safe-area-inset-right));
   }
-  main { padding-top: 40px; padding-bottom: 28px; }
+  main { padding-top: max(40px, env(safe-area-inset-top)); padding-bottom: max(40px, env(safe-area-inset-bottom)); }
   header { margin-bottom: 32px; text-align: center; }
   .logo { display: block; width: 132px; height: 132px; margin: 0 auto 20px; }
   h1 {
@@ -305,16 +306,6 @@
     background: var(--wait-bg);
   }
   .mark.differs { color: var(--no); background: var(--no-bg); }
-  footer {
-    max-width: 460px;
-    padding-top: 12px;
-    padding-bottom: max(24px, env(safe-area-inset-bottom));
-    color: var(--muted);
-    font-size: 11px;
-    line-height: 1.5;
-    text-align: center;
-  }
-  footer p { margin: 0; padding-top: 18px; border-top: 1px solid var(--line); }
 </style>
 </head>
 <body>
@@ -334,9 +325,6 @@
   <section id="images" hidden></section>
   <div id="many" role="status" hidden></div>
 </main>
-<footer>
-  <p>Each photo is a proven edit of a signed original. Covers are drawn by the app and not proved. Not a privacy guarantee. A name is a linkable pseudonym, not a real identity. Our server holds the address keys and is the gate tonight. A picture's link to its seal is the uploader's word.</p>
-</footer>
 <script>
 'use strict';
 
