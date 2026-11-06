@@ -4,7 +4,7 @@ import path from "node:path";
 import { ArkivStore, arkivSettings } from "@/lib/arkiv";
 import { normalName } from "@/lib/ens";
 import type { Credential } from "@/lib/world";
-import { isSwarmRef } from "@/lib/swarm";
+import { isSwarmRef, pictureUrl } from "@/lib/swarm";
 import { isSealHash } from "@/lib/world";
 
 /**
@@ -60,6 +60,27 @@ export const PICTURE_MAX_BYTES = 3 * 1024 * 1024;
 
 /** The smallest picture kept, in bytes. */
 export const PICTURE_MIN_BYTES = 1024;
+
+/** Where a seal's picture can be seen: its Swarm reference and a public address for it. */
+export type PictureLink = { ref: string; url: string };
+
+export function pictureLink(picture: PictureRecord | null | undefined): PictureLink | null {
+  return picture ? { ref: picture.ref, url: pictureUrl(picture.ref) } : null;
+}
+
+/** A seal of one person at an event, with its picture when one was kept. */
+export type EventPhoto = PassSeal & { picture: PictureLink | null };
+
+/** The groups of an event, each photo with its picture or null. */
+export function withPictures(
+  groups: EventGroup[],
+  pictures: PictureRecord[],
+): { photos: EventPhoto[] }[] {
+  const byHash = new Map(pictures.map((picture) => [picture.hash, picture]));
+  return groups.map(({ photos }) => ({
+    photos: photos.map((photo) => ({ ...photo, picture: pictureLink(byHash.get(photo.hash)) })),
+  }));
+}
 
 /** A pointer as it may be kept: every field well formed, or it is not a pointer. */
 export function keptPicture(value: unknown, hash: string): PictureRecord | null {

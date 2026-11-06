@@ -1,9 +1,9 @@
-import { records, type SealRecord } from "@/lib/records";
+import { pictureLink, records, type PictureRecord, type SealRecord } from "@/lib/records";
 import { isSealHash } from "@/lib/world";
 
 /**
  * Says whether a person has authorised this seal, with which pass and which account, and at
- * which event.
+ * which event, and where its picture is kept on Swarm, if one was kept.
  */
 export async function GET(_request: Request, { params }: { params: Promise<{ hash: string }> }) {
   const { hash } = await params;
@@ -11,8 +11,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ has
     return Response.json({ state: "none" }, { status: 404 });
   }
   let record: SealRecord | null;
+  let picture: PictureRecord | null;
   try {
     record = await records().get(hash);
+    picture = record ? await records().getPicture(hash) : null;
   } catch {
     return Response.json({ state: "unknown", reason: "store" }, { status: 503 });
   }
@@ -25,5 +27,6 @@ export async function GET(_request: Request, { params }: { params: Promise<{ has
     name: record.name,
     event: record.event,
     at: record.at,
+    picture: pictureLink(picture),
   });
 }
