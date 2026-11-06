@@ -24,6 +24,7 @@ enum ServiceError: Error {
 /// Talks to the sealing service over HTTP.
 struct ServiceClient {
     let base: URL
+    let word: String
 
     /// The address from the SERVICE_URL environment variable, else from Settings. It is never in the code.
     static func address(fromSettings text: String) -> URL? {
@@ -33,11 +34,18 @@ struct ServiceClient {
         return url
     }
 
-    /// Sends the photo and the box. Returns the job's id.
-    func seal(jpeg: Data, box: GridBox) async throws -> String {
+    /// The access word from the SERVICE_WORD environment variable, else from Settings. It is never in the code.
+    static func accessWord(fromSettings text: String) -> String {
+        ProcessInfo.processInfo.environment["SERVICE_WORD"] ?? text
+    }
+
+    /// Sends the photo and the boxes, for the one edit this app asks for. Returns the job's id.
+    func seal(jpeg: Data, boxes: [GridBox]) async throws -> String {
         var request = URLRequest(url: base.appendingPathComponent("seal"))
         request.httpMethod = "POST"
-        request.setValue("\(box.x),\(box.y),\(box.width),\(box.height)", forHTTPHeaderField: "X-Areas")
+        let areas = boxes.map { "\($0.x),\($0.y),\($0.width),\($0.height)" }.joined(separator: ";")
+        request.setValue(areas, forHTTPHeaderField: "X-Areas")
+        request.setValue("blank", forHTTPHeaderField: "X-Edit")
         request.setValue("image/jpeg", forHTTPHeaderField: "Content-Type")
         request.httpBody = jpeg
         struct Started: Decodable { var id: String }
@@ -45,6 +53,8 @@ struct ServiceClient {
         if code == 202, let started = try? JSONDecoder().decode(Started.self, from: data) {
             return started.id
         }
+        // A list of rectangles too long for the service to read at all.
+        if code == 431 { throw ServiceError.refused("too-many-areas") }
         throw refusal(data)
     }
 
@@ -66,6 +76,8 @@ struct ServiceClient {
     }
 
     func send(_ request: URLRequest) async throws -> (Data, Int) {
+        var request = request
+        request.setValue(word, forHTTPHeaderField: "X-Access-Word")
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
             return (data, (response as? HTTPURLResponse)?.statusCode ?? 0)
@@ -85,8 +97,10 @@ struct ServiceClient {
 /// The fixed sentence for each reason word. Nothing the service says is shown as written.
 func sentence(forReason reason: String) -> String {
     switch reason {
-    case "off-grid": return "The box is not on the grid. Check the cell size."
-    case "outside": return "The box reaches outside the photo."
+    case "word": return "The access word is wrong. Check Settings."
+    case "too-many-areas": return "This shape needs too many rectangles. Draw a simpler one."
+    case "off-grid": return "The shape is not on the grid."
+    case "outside": return "The shape reaches outside the photo."
     case "too-big": return "The photo is too large to send."
     case "too-many-pixels": return "The photo has too many pixels."
     case "format": return "This photo's format cannot be used here."

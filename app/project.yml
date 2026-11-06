@@ -10,6 +10,7 @@ settings:
     INFOPLIST_KEY_UILaunchScreen_Generation: YES
     INFOPLIST_KEY_CFBundleDisplayName: Blank Demo
     INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+    INFOPLIST_KEY_NSCameraUsageDescription: "The app takes the photo you choose to send."
     PRODUCT_BUNDLE_IDENTIFIER: blank.demo.app
     MARKETING_VERSION: "0.1"
     CURRENT_PROJECT_VERSION: "1"

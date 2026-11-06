@@ -1,15 +1,15 @@
 import PhotosUI
 import SwiftUI
 
-/// The first screen: choose a photo, draw a box on it with a finger, send it, wait, and open the result.
+/// The first screen: take or choose a photo, draw a closed shape on it with a finger, send it, wait, and open the result.
 struct AreaScreen: View {
-    /// The grid the box snaps to, in photo pixels.
-    @AppStorage("cellSize") private var cellSize = 16
-    @AppStorage("fullSize") private var fullSize = false
     @AppStorage("serviceAddress") private var serviceAddress = ""
+    @AppStorage("accessWord") private var accessWord = ""
 
-    /// The long side a photo is drawn at, unless the Full size setting is on.
-    private static let stageLongSide = 1600
+    /// The grid the shape snaps to, in photo pixels.
+    private static let cell = 16
+    /// The long side a photo is drawn at.
+    private static let stageLongSide = 2600
     /// How long this screen waits for one job, in seconds.
     private static let waitLimit: TimeInterval = 600
     /// How many failed checks in a row, one second apart, before it stops asking.
@@ -19,38 +19,40 @@ struct AreaScreen: View {
     @State private var source: UIImage?
     @State private var photo: PreparedPhoto?
     @State private var problem: String?
-    // The finger's two points, in photo pixels. The box is worked out from them, so it follows the cell size.
-    @State private var start: CGPoint?
-    @State private var end: CGPoint?
+    // The finger's line, in photo pixels. The shape is worked out from it.
+    @State private var stroke: [CGPoint] = []
+    @State private var drawing = false
+    /// True while a finger is down. It goes false by itself even when the system cuts a touch off.
+    @GestureState private var touching = false
+    @State private var shape: PenShape?
     @State private var running = false
     @State private var progress: String?
     @State private var finished: FinishedJob?
     @State private var jobTask: Task<Void, Never>?
+    @State private var showCamera = false
 
     /// A finished job, for the result screen.
     private struct FinishedJob: Identifiable {
         let id: String
         let client: ServiceClient
         let result: JobResult
+        let boxes: [GridBox]
+        let cell: Int
         let width: Int
         let height: Int
     }
 
-    private var box: GridBox? {
-        guard let start, let end, let photo else { return nil }
-        return GridBox.snapped(from: start, to: end, photoWidth: photo.width, photoHeight: photo.height, cell: cellSize)
-    }
-
     private var serviceURL: URL? { ServiceClient.address(fromSettings: serviceAddress) }
 
-    private var boxLine: String {
-        guard let photo else { return problem ?? "No photo yet." }
-        guard let box else { return "Draw a box on the photo with a finger." }
-        return "Box: \(box.width) x \(box.height) at \(box.x), \(box.y) in a \(photo.width) x \(photo.height) photo"
-    }
+    /// A photo that could not be read. Nothing shows when nothing went wrong.
+    private var boxLine: String? { photo == nil ? problem : nil }
 
     var body: some View {
         VStack(spacing: 12) {
+            if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                Button("Take a photo") { showCamera = true }
+                    .disabled(running)
+            }
             PhotosPicker("Choose a sample photo", selection: $pick, matching: .images)
                 .disabled(running)
             Spacer(minLength: 0)
@@ -58,51 +60,55 @@ struct AreaScreen: View {
                 canvas(photo)
             }
             Spacer(minLength: 0)
-            Text(boxLine)
-                .font(.footnote)
-                .multilineTextAlignment(.center)
-                .accessibilityIdentifier("boxLine")
+            if let boxLine {
+                Text(boxLine)
+                    .font(.footnote)
+                    .multilineTextAlignment(.center)
+                    .accessibilityIdentifier("boxLine")
+            }
             sendArea
             settings
         }
         .padding(16)
         .task(id: pick) { await load() }
-        .onChange(of: cellSize) {
-            progress = nil
-            prepare()
-        }
-        .onChange(of: fullSize) {
-            clearBox()
-            prepare()
+        .onChange(of: touching) {
+            // A touch that is cut off gets no end call, and the next line must not join this one.
+            if !touching { endLine() }
         }
         .sheet(item: $finished) { job in
-            ResultScreen(client: job.client, jobID: job.id, result: job.result, width: job.width, height: job.height) {
-                finished = nil
-                clearBox()
+            ResultScreen(client: job.client, jobID: job.id, result: job.result, boxes: job.boxes, cell: job.cell,
+                         width: job.width, height: job.height) {
+                startOver()
             }
-            // The words must stay with the result, so only "Start over" closes it.
+            // Only "Start over" closes the result, so the photo goes with it.
             .interactiveDismissDisabled()
+        }
+        .fullScreenCover(isPresented: $showCamera) {
+            SystemCamera { image in
+                showCamera = false
+                if let image {
+                    // So the picker can load the same photo again later.
+                    pick = nil
+                    use(image)
+                }
+            }
+            .ignoresSafeArea()
         }
     }
 
     private var sendArea: some View {
         VStack(spacing: 8) {
-            if box != nil {
-                Text("This photo goes to our server for the proof check.")
-                    .font(.footnote)
-                    .multilineTextAlignment(.center)
-            }
             HStack {
                 if running {
                     Button("Stop waiting") { jobTask?.cancel() }
                 } else {
-                    Button("Clear box") { clearBox() }
-                        .disabled(box == nil)
+                    Button("Clear") { clearShape() }
+                        .disabled(shape == nil)
                 }
                 Spacer()
                 Button("Blank this area") { startJob() }
                     .buttonStyle(.borderedProminent)
-                    .disabled(box == nil || running || serviceURL == nil)
+                    .disabled(shape == nil || running || serviceURL == nil)
             }
             if let progress {
                 Text(progress)
@@ -121,88 +127,124 @@ struct AreaScreen: View {
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .keyboardType(.URL)
-                Toggle("Full size", isOn: $fullSize)
-                Stepper("Cell size: \(cellSize) px", value: $cellSize, in: 8...64, step: 8)
+                SecureField("Access word", text: $accessWord)
+                    .textFieldStyle(.roundedBorder)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
             }
             .padding(.top, 8)
             .disabled(running)
         }
     }
 
-    /// The photo, the area that takes the finger, and the box on top.
+    /// The photo, the area that takes the finger, and the finger's line on top.
     private func canvas(_ photo: PreparedPhoto) -> some View {
         Image(uiImage: photo.image)
             .resizable()
             .scaledToFit()
+            .accessibilityIdentifier("photo")
             .overlay {
                 GeometryReader { view in
-                    let pixelsPerPoint = CGFloat(photo.width) / max(view.size.width, 1)
+                    let scale = view.size.width / CGFloat(max(photo.width, 1))
                     ZStack(alignment: .topLeading) {
                         Color.clear
                             .contentShape(Rectangle())
-                            .gesture(DragGesture(minimumDistance: 0).onChanged { drag in
-                                guard !running else { return }
-                                start = CGPoint(x: drag.startLocation.x * pixelsPerPoint, y: drag.startLocation.y * pixelsPerPoint)
-                                end = CGPoint(x: drag.location.x * pixelsPerPoint, y: drag.location.y * pixelsPerPoint)
-                                progress = nil
-                            })
-                        if let box {
-                            Rectangle()
-                                .fill(.black.opacity(0.35))
-                                .overlay(Rectangle().stroke(.yellow, lineWidth: 2))
-                                .frame(width: CGFloat(box.width) / pixelsPerPoint, height: CGFloat(box.height) / pixelsPerPoint)
-                                .offset(x: CGFloat(box.x) / pixelsPerPoint, y: CGFloat(box.y) / pixelsPerPoint)
+                            .gesture(DragGesture(minimumDistance: 0)
+                                .updating($touching) { _, down, _ in down = true }
+                                .onChanged { drag in
+                                    guard !running else { return }
+                                    if !drawing {
+                                        clearShape()
+                                        drawing = true
+                                    }
+                                    stroke.append(CGPoint(x: drag.location.x / scale, y: drag.location.y / scale))
+                                }
+                                .onEnded { _ in endLine() })
+                        if !stroke.isEmpty {
+                            Path { $0.addLines(stroke.map { CGPoint(x: $0.x * scale, y: $0.y * scale) }) }
+                                .stroke(.yellow, lineWidth: 2)
                                 .allowsHitTesting(false)
                         }
                     }
                 }
             }
-            .accessibilityIdentifier("photo")
     }
 
-    private func clearBox() {
-        start = nil
-        end = nil
+    private func endLine() {
+        guard drawing else { return }
+        drawing = false
+        finishShape()
+    }
+
+    /// After a result the photo goes too, so a second area of one photo is not one drag away.
+    private func startOver() {
+        finished = nil
+        clearShape()
+        source = nil
+        photo = nil
+        pick = nil
+        problem = nil
+    }
+
+    /// The finger has lifted: its line closes and its cells are worked out.
+    private func finishShape() {
+        guard let photo, !stroke.isEmpty else { return }
+        shape = PenShape.make(path: stroke, photoWidth: photo.width, photoHeight: photo.height, cell: Self.cell)
+    }
+
+    private func clearShape() {
+        stroke = []
+        drawing = false
+        shape = nil
         progress = nil
     }
 
     private func load() async {
         guard let pick else { return }
-        clearBox()
+        clearShape()
         source = nil
         photo = nil
         problem = nil
         let data = try? await pick.loadTransferable(type: Data.self)
-        source = data.flatMap { UIImage(data: $0) }
-        prepare()
-        if photo == nil {
+        if let image = data.flatMap({ UIImage(data: $0) }) {
+            use(image)
+        } else {
             problem = "Could not read this photo."
         }
     }
 
+    /// A new photo, from the picker or the camera.
+    private func use(_ image: UIImage) {
+        clearShape()
+        source = image
+        prepare()
+        problem = photo == nil ? "Could not read this photo." : nil
+    }
+
     private func prepare() {
         photo = source.flatMap {
-            PreparedPhoto.make(from: $0, longSide: fullSize ? nil : Self.stageLongSide, cell: cellSize)
+            PreparedPhoto.make(from: $0, longSide: Self.stageLongSide, cell: Self.cell)
         }
     }
 
     private func startJob() {
-        guard let photo, let box, let serviceURL else { return }
+        guard let photo, let shape, let serviceURL else { return }
         running = true
         jobTask = Task {
-            progress = await runJob(ServiceClient(base: serviceURL), photo: photo, box: box)
+            let client = ServiceClient(base: serviceURL, word: ServiceClient.accessWord(fromSettings: accessWord))
+            progress = await runJob(client, photo: photo, boxes: shape.boxes)
             running = false
             jobTask = nil
         }
     }
 
     /// Sends the photo and waits for the job to end. Returns the line to show, or nil when the result opens.
-    private func runJob(_ client: ServiceClient, photo: PreparedPhoto, box: GridBox) async -> String? {
+    private func runJob(_ client: ServiceClient, photo: PreparedPhoto, boxes: [GridBox]) async -> String? {
         let stopped = "Stopped waiting. The server may still be working, so the next send can say it is busy."
         progress = "Sending."
         let id: String
         do {
-            id = try await client.seal(jpeg: photo.jpeg, box: box)
+            id = try await client.seal(jpeg: photo.jpeg, boxes: boxes)
         } catch ServiceError.refused(let reason) {
             return sentence(forReason: reason)
         } catch {
@@ -222,10 +264,11 @@ struct AreaScreen: View {
                 case "queued", "running":
                     progress = "Working: \(Int(seconds)) s"
                 case "done":
-                    guard let result = JobResult(job: job, box: box, width: photo.width, height: photo.height) else {
+                    guard let result = JobResult(job: job, boxes: boxes, width: photo.width, height: photo.height) else {
                         return "The answer does not match what was sent, so no result is shown."
                     }
-                    finished = FinishedJob(id: id, client: client, result: result, width: photo.width, height: photo.height)
+                    finished = FinishedJob(id: id, client: client, result: result, boxes: boxes, cell: Self.cell,
+                                           width: photo.width, height: photo.height)
                     return nil
                 default:
                     return sentence(forReason: job.reason ?? "failed")
