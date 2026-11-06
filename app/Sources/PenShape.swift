@@ -24,6 +24,34 @@ struct PenShape: Equatable {
         return PenShape(boxes: grid.rectangles(cell: cell, photoWidth: photoWidth, photoHeight: photoHeight),
                         cellCount: grid.marked.filter { $0 }.count)
     }
+
+    /// Whether a closed line is large enough to hold one cell. A tap or a straight stroke is not.
+    static func holdsACell(path: [CGPoint], photoWidth: Int, photoHeight: Int, cell: Int) -> Bool {
+        let points = path.map {
+            CGPoint(x: min(max($0.x, 0), CGFloat(photoWidth - 1)), y: min(max($0.y, 0), CGFloat(photoHeight - 1)))
+        }
+        var twice: CGFloat = 0
+        for (index, point) in points.enumerated() {
+            let next = points[(index + 1) % points.count]
+            twice += point.x * next.y - next.x * point.y
+        }
+        return abs(twice) / 2 >= CGFloat(cell * cell)
+    }
+
+    /// The shapes as one: overlapping ones join, and no cell is listed twice.
+    static func joined(_ shapes: [PenShape], photoWidth: Int, photoHeight: Int, cell: Int) -> PenShape? {
+        guard !shapes.isEmpty, cell > 0, photoWidth > 0, photoHeight > 0 else { return nil }
+        var grid = CellGrid(columns: (photoWidth + cell - 1) / cell, rows: (photoHeight + cell - 1) / cell)
+        for box in shapes.flatMap(\.boxes) {
+            for row in box.y / cell..<min((box.y + box.height + cell - 1) / cell, grid.rows) {
+                for column in box.x / cell..<min((box.x + box.width + cell - 1) / cell, grid.columns) {
+                    grid.marked[row * grid.columns + column] = true
+                }
+            }
+        }
+        return PenShape(boxes: grid.rectangles(cell: cell, photoWidth: photoWidth, photoHeight: photoHeight),
+                        cellCount: grid.marked.filter { $0 }.count)
+    }
 }
 
 /// Which cells of the grid are in the shape.

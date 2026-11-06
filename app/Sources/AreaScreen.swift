@@ -25,8 +25,14 @@ struct AreaScreen: View {
     @State private var drawing = false
     /// True while a finger is down. It goes false by itself even when the system cuts a touch off.
     @GestureState private var touching = false
+    /// Each closed line, in the order drawn.
+    @State private var shapes: [PenShape] = []
+    /// All of them as one. This is what is sent.
     @State private var shape: PenShape?
-    @State private var preview: UIImage?
+    @State private var still: UIImage?
+    @State private var fresh: UIImage?
+    @State private var freshAnchor = UnitPoint.center
+    @State private var freshShown = false
     @State private var previewTask: Task<Void, Never>?
     @State private var running = false
     @State private var progress: String?
@@ -179,6 +185,9 @@ struct AreaScreen: View {
                     Button("Clear") { clearShape() }
                         .foregroundStyle(Theme.muted)
                         .disabled(shape == nil)
+                    Button("Undo") { undoShape() }
+                        .foregroundStyle(Theme.muted)
+                        .disabled(shape == nil)
                 }
                 Button { startJob() } label: {
                     Theme.mainLabel(Text("Blank this area"))
@@ -238,9 +247,22 @@ struct AreaScreen: View {
     /// The photo with the yellow face, the area that takes the finger, and the finger's line on top.
     /// The line shows only while the finger is down.
     private func canvas(_ photo: PreparedPhoto) -> some View {
-        Image(uiImage: preview ?? photo.image)
+        Image(uiImage: photo.image)
             .resizable()
             .scaledToFit()
+            .overlay {
+                if let still {
+                    Image(uiImage: still).resizable()
+                }
+            }
+            .overlay {
+                if let fresh {
+                    Image(uiImage: fresh)
+                        .resizable()
+                        .scaleEffect(freshShown ? 1 : 0.92, anchor: freshAnchor)
+                        .opacity(freshShown ? 1 : 0)
+                }
+            }
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.line, lineWidth: 1))
             .accessibilityIdentifier("chosenPhoto")
@@ -255,7 +277,8 @@ struct AreaScreen: View {
                                 .onChanged { drag in
                                     guard !running else { return }
                                     if !drawing {
-                                        clearShape()
+                                        stroke = []
+                                        progress = nil
                                         drawing = true
                                     }
                                     stroke.append(CGPoint(x: drag.location.x / scale, y: drag.location.y / scale))
@@ -264,12 +287,6 @@ struct AreaScreen: View {
                         if drawing {
                             Path { $0.addLines(stroke.map { CGPoint(x: $0.x * scale, y: $0.y * scale) }) }
                                 .stroke(.yellow, lineWidth: 2)
-                                .allowsHitTesting(false)
-                        }
-                        if previewTask != nil {
-                            ProgressView()
-                                .accessibilityIdentifier("drawing")
-                                .frame(maxWidth: .infinity, maxHeight: .infinity)
                                 .allowsHitTesting(false)
                         }
                     }
@@ -301,22 +318,50 @@ struct AreaScreen: View {
         problem = nil
     }
 
-    /// The finger has lifted: its line closes and its cells are worked out. The preview is drawn away
-    /// from the screen's own thread, so a large photo does not stop the screen. A newer shape replaces it.
+    /// The finger has lifted: its line closes and its cells join the others. A line too small to hold a cell adds nothing.
     private func finishShape() {
+        defer { stroke = [] }
+        guard let photo, !stroke.isEmpty,
+              PenShape.holdsACell(path: stroke, photoWidth: photo.width, photoHeight: photo.height, cell: Self.cell),
+              let added = PenShape.make(path: stroke, photoWidth: photo.width, photoHeight: photo.height, cell: Self.cell) else { return }
+        shapes.append(added)
+        shapesChanged(newest: added)
+    }
+
+    private func undoShape() {
+        guard !shapes.isEmpty else { return }
+        shapes.removeLast()
+        shapesChanged()
+    }
+
+    /// All the shapes as one. The look is drawn away from the screen's own thread, so a large photo does not
+    /// stop the screen. A newer change replaces it. The newest shape's piece arrives softly.
+    private func shapesChanged(newest: PenShape? = nil) {
         previewTask?.cancel()
         previewTask = nil
-        preview = nil
-        guard let photo, !stroke.isEmpty else { return }
-        shape = PenShape.make(path: stroke, photoWidth: photo.width, photoHeight: photo.height, cell: Self.cell)
-        guard let boxes = shape?.boxes else { return }
-        let (image, cell) = (photo.image, Self.cell)
+        progress = nil
+        guard let photo else { return }
+        shape = PenShape.joined(shapes, photoWidth: photo.width, photoHeight: photo.height, cell: Self.cell)
+        guard let boxes = shape?.boxes else {
+            still = nil
+            fresh = nil
+            return
+        }
+        let older = PenShape.joined(Array(shapes.dropLast()), photoWidth: photo.width, photoHeight: photo.height, cell: Self.cell)?.boxes ?? []
+        let (width, height, cell, first) = (photo.width, photo.height, Self.cell, newest?.boxes.first)
         previewTask = Task.detached(priority: .userInitiated) {
-            let drawn = AreaPreview.face(image, boxes: boxes, cell: cell)
+            let drawn = AreaPreview.layers(width: width, height: height, boxes: boxes, older: older, newest: first, cell: cell)
             await MainActor.run {
                 guard !Task.isCancelled else { return }
-                preview = drawn
+                still = drawn?.still
+                fresh = drawn?.fresh
+                freshAnchor = drawn?.anchor ?? .center
+                freshShown = false
                 previewTask = nil
+                // On the next turn, so the screen first draws it small and clear.
+                DispatchQueue.main.async {
+                    withAnimation(.easeOut(duration: 0.2)) { freshShown = true }
+                }
             }
         }
     }
@@ -326,8 +371,10 @@ struct AreaScreen: View {
         previewTask = nil
         stroke = []
         drawing = false
+        shapes = []
         shape = nil
-        preview = nil
+        still = nil
+        fresh = nil
         progress = nil
     }
 
