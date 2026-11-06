@@ -109,6 +109,8 @@ Once the root switch is real, a person's name is `<nickname>.users.zk-seal.eth`.
 - Our server is the registrar. It checks World, then our bot wallet makes the name. No contract makes that check today.
 - Our server derives each person's key from their pass and a server secret, so it can sign for every person. In the intended design the key stays on the phone.
 - An event's ENS name opening the gallery page: **not there**.
+- Anyone can choose any name the web side accepts, so a name can look like another person's. A name shows nothing about who chose it.
+- A name that starts with `test-` stays out of the gallery's list, because our trial rows start that way.
 - A name that was never registered can still answer through the parent's resolver. So read "exists" from the owner, in the registry, not from a resolver answer.
 
 ## Arkiv
