@@ -292,3 +292,14 @@ input[type="password"]:focus-visible {
 .add {
   margin: 1.5rem 0 1rem;
 }
+
+button.wallet {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+button.wallet img {
+  border-radius: 0.25rem;
+}

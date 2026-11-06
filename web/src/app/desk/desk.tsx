@@ -20,12 +20,30 @@ import {
   type StepId,
   type StepState,
 } from "@/lib/desk-setup";
+import { useWallets, walletSentence, type Provider, type Wallet } from "@/lib/wallets";
 import { Members } from "./members";
 
-declare global {
-  interface Window {
-    ethereum?: EIP1193Provider;
-  }
+const NO_WALLET =
+  "No wallet found in this browser. In Brave, open Settings, Web3, and set the default Ethereum wallet to Brave Wallet, then reload.";
+const LOCKED = "Unlock the wallet and try again.";
+
+function transport(provider: Provider) {
+  return custom(provider as unknown as EIP1193Provider);
+}
+
+function readChainId(value: unknown): number | null {
+  if (typeof value === "string" && /^0x[0-9a-fA-F]+$/.test(value)) return Number.parseInt(value, 16);
+  if (typeof value === "number" && Number.isSafeInteger(value)) return value;
+  return null;
+}
+
+function firstAccount(value: unknown): Address | null {
+  const first = Array.isArray(value) ? value[0] : undefined;
+  return typeof first === "string" && isAddress(first) ? getAddress(first) : null;
+}
+
+function chainWords(chainId: number): string {
+  return chainId === 1 ? "Ethereum mainnet" : `chain ${chainId}`;
 }
 
 type Config = { desk: string; bot: Address | null; chainId: number };
@@ -109,6 +127,9 @@ export function Desk() {
   const [sent, setSent] = useState<Partial<Record<StepId, Sent>>>({});
   const [busy, setBusy] = useState(false);
   const [sentence, setSentence] = useState<string | null>(null);
+  const { wallets, looked } = useWallets();
+  const [chosen, setChosen] = useState<Wallet | null>(null);
+  const [chainId, setChainId] = useState<number | null>(null);
 
   const refresh = useCallback(async (now: Config) => {
     const answer = await fetch("/api/desk/setup", { cache: "no-store" })
@@ -133,23 +154,75 @@ export function Desk() {
     };
   }, [refresh]);
 
-  async function connect() {
+  useEffect(() => {
+    const provider = chosen?.provider;
+    if (!provider?.on) return;
+    const onAccounts = (value: unknown) => setAccount(firstAccount(value));
+    const onChain = (value: unknown) => setChainId(readChainId(value));
+    provider.on("accountsChanged", onAccounts);
+    provider.on("chainChanged", onChain);
+    return () => {
+      provider.removeListener?.("accountsChanged", onAccounts);
+      provider.removeListener?.("chainChanged", onChain);
+    };
+  }, [chosen]);
+
+  async function connect(wallet: Wallet) {
     setSentence(null);
-    if (!window.ethereum) {
-      setSentence("No browser wallet was found.");
-      return;
-    }
+    setBusy(true);
     try {
-      const wallet = createWalletClient({ transport: custom(window.ethereum) });
-      const [first] = await wallet.requestAddresses();
-      setAccount(first ? getAddress(first) : null);
-    } catch {
-      setSentence("The wallet did not connect.");
+      const accounts = await wallet.provider.request({ method: "eth_requestAccounts" });
+      const first = firstAccount(accounts);
+      if (!first) {
+        setSentence(LOCKED);
+        return;
+      }
+      const chain = readChainId(await wallet.provider.request({ method: "eth_chainId" }));
+      setChosen(wallet);
+      setAccount(first);
+      setChainId(chain);
+    } catch (error) {
+      setSentence(walletSentence(error) ?? "The wallet did not connect.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Asks the chosen wallet to move to the desk's chain. Gives back whether it is there now. */
+  async function switchChain(provider: Provider, want: number): Promise<boolean> {
+    try {
+      await provider.request({
+        method: "wallet_switchEthereumChain",
+        params: [{ chainId: `0x${want.toString(16)}` }],
+      });
+      const now = readChainId(await provider.request({ method: "eth_chainId" }));
+      setChainId(now);
+      if (now === want) return true;
+    } catch (error) {
+      const known = walletSentence(error);
+      if (known) {
+        setSentence(known);
+        return false;
+      }
+    }
+    setSentence(`Switch the wallet to ${chainWords(want)}, then try again.`);
+    return false;
+  }
+
+  async function onSwitch() {
+    if (!chosen || typeof config !== "object" || !config) return;
+    setSentence(null);
+    setBusy(true);
+    try {
+      await switchChain(chosen.provider, config.chainId);
+    } finally {
+      setBusy(false);
     }
   }
 
   async function send(id: StepId) {
-    if (!window.ethereum || !account || typeof config !== "object" || !config) return;
+    const provider = chosen?.provider;
+    if (!provider || !account || typeof config !== "object" || !config) return;
     if (read.name !== "read") return;
     setSentence(null);
     let tx;
@@ -161,28 +234,28 @@ export function Desk() {
     }
     setBusy(true);
     try {
-      const wallet = createWalletClient({ transport: custom(window.ethereum) });
-      const chainId = await wallet.getChainId();
-      if (chainId !== config.chainId) {
-        setSentence(
-          config.chainId === 1
-            ? "Switch the wallet to Ethereum mainnet, then try again."
-            : `Switch the wallet to chain ${config.chainId}, then try again.`,
-        );
+      let now: number | null;
+      try {
+        now = readChainId(await provider.request({ method: "eth_chainId" }));
+      } catch (error) {
+        setSentence(walletSentence(error) ?? "The wallet cannot be reached. Try again.");
         return;
       }
+      setChainId(now);
+      if (now !== config.chainId && !(await switchChain(provider, config.chainId))) return;
+      const wallet = createWalletClient({ transport: transport(provider) });
       let hash: Hex;
       try {
         hash = await wallet.sendTransaction({ account, chain: null, to: tx.to, data: tx.data });
-      } catch {
-        setSentence("The transaction was not sent.");
+      } catch (error) {
+        setSentence(walletSentence(error) ?? "The transaction was not sent.");
         return;
       }
-      setSent((now) => ({ ...now, [id]: { hash, state: "sent", block: null } }));
-      const reader = createPublicClient({ transport: custom(window.ethereum) });
+      setSent((was) => ({ ...was, [id]: { hash, state: "sent", block: null } }));
+      const reader = createPublicClient({ transport: transport(provider) });
       const receipt = await reader.waitForTransactionReceipt({ hash }).catch(() => null);
       const state = receipt?.status === "success" ? "confirmed" : "failed";
-      setSent((now) => ({ ...now, [id]: { hash, state, block: receipt?.blockNumber ?? null } }));
+      setSent((was) => ({ ...was, [id]: { hash, state, block: receipt?.blockNumber ?? null } }));
       if (state === "failed") setSentence("The transaction did not go through.");
       await refresh(config);
     } finally {
@@ -208,13 +281,38 @@ export function Desk() {
         <dt>Bot</dt>
         <dd className="mono">{config.bot ?? "None on this server"}</dd>
         <dt>Wallet</dt>
-        <dd className="mono">{account ?? "Not connected"}</dd>
+        <dd className="mono">
+          {account ? (chosen ? `${account} (${chosen.info.name})` : account) : "Not connected"}
+        </dd>
       </dl>
 
-      {!account && (
+      {!account &&
+        (wallets.length === 0 ? (
+          looked && <p className="state bad">{NO_WALLET}</p>
+        ) : (
+          <div className="actions">
+            {wallets.map((wallet) => (
+              <button
+                type="button"
+                key={wallet.info.uuid}
+                className="wallet"
+                onClick={() => connect(wallet)}
+                disabled={busy}
+              >
+                {wallets.length > 1 && wallet.info.icon && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={wallet.info.icon} alt="" width={20} height={20} />
+                )}
+                {wallets.length === 1 ? `Connect ${wallet.info.name}` : wallet.info.name}
+              </button>
+            ))}
+          </div>
+        ))}
+      {account && chainId !== null && chainId !== config.chainId && (
         <div className="actions">
-          <button type="button" onClick={connect}>
-            Connect wallet
+          <p className="state bad">This wallet is on {chainWords(chainId)}, not {chainWords(config.chainId)}.</p>
+          <button type="button" onClick={onSwitch} disabled={busy}>
+            Switch to {chainWords(config.chainId)}
           </button>
         </div>
       )}
