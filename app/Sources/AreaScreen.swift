@@ -33,6 +33,7 @@ struct AreaScreen: View {
     @State private var finished: FinishedJob?
     @State private var jobTask: Task<Void, Never>?
     @State private var showCamera = false
+    @State private var showSettings = false
 
     /// A finished job, for the result screen.
     private struct FinishedJob: Identifiable {
@@ -58,28 +59,43 @@ struct AreaScreen: View {
     private var boxLine: String? { photo == nil ? problem : nil }
 
     var body: some View {
-        VStack(spacing: 12) {
-            if UIImagePickerController.isSourceTypeAvailable(.camera) {
-                Button("Take a photo") { showCamera = true }
-                    .disabled(running)
-            }
-            PhotosPicker("Choose a sample photo", selection: $pick, matching: .images)
+        VStack(spacing: 14) {
+            HStack {
+                Spacer()
+                Button { showSettings = true } label: {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 18))
+                        .foregroundStyle(Theme.muted)
+                }
+                .accessibilityLabel("Settings")
                 .disabled(running)
-            Spacer(minLength: 0)
+            }
             if let photo {
+                photoChoices
+                Spacer(minLength: 0)
                 canvas(photo)
+                Spacer(minLength: 0)
+                sendArea
+            } else {
+                Spacer()
+                Image("HomeLogo")
+                    .resizable()
+                    .frame(width: 144, height: 144)
+                    .offset(y: -110)
+                    .accessibilityLabel("")
+                    .accessibilityIdentifier("homeLogo")
+                if let boxLine {
+                    Text(boxLine)
+                        .font(Theme.text(15))
+                        .foregroundStyle(Theme.muted)
+                        .accessibilityIdentifier("boxLine")
+                }
+                firstChoices
+                Spacer()
             }
-            Spacer(minLength: 0)
-            if let boxLine {
-                Text(boxLine)
-                    .font(.footnote)
-                    .multilineTextAlignment(.center)
-                    .accessibilityIdentifier("boxLine")
-            }
-            sendArea
-            settings
         }
         .padding(16)
+        .background(Theme.background.ignoresSafeArea())
         .task(id: pick) { await load() }
         .onAppear { keepLaunchSettings() }
         .onChange(of: touching) {
@@ -93,7 +109,10 @@ struct AreaScreen: View {
             }
             // Only "Start over" closes the result, so the photo goes with it.
             .interactiveDismissDisabled()
+            .presentationBackground(Theme.background)
+            .tint(Theme.accent)
         }
+        .sheet(isPresented: $showSettings) { settings }
         .fullScreenCover(isPresented: $showCamera) {
             SystemCamera { image in
                 showCamera = false
@@ -107,55 +126,113 @@ struct AreaScreen: View {
         }
     }
 
+    /// With no photo: one main action, and a quiet second one.
+    private var firstChoices: some View {
+        VStack(spacing: 10) {
+            if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                Button { showCamera = true } label: {
+                    Theme.mainLabel(Label("Take a photo", systemImage: "camera.fill"))
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+            }
+            PhotosPicker(selection: $pick, matching: .images) {
+                Label("Choose a sample photo", systemImage: "photo")
+                    .font(Theme.text(15))
+                    .foregroundStyle(Theme.muted)
+            }
+        }
+        .padding(.top, 8)
+    }
+
+    /// With a photo: both ways to get another one, quietly.
+    private var photoChoices: some View {
+        HStack {
+            if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                Button { showCamera = true } label: {
+                    Label("Take a photo", systemImage: "camera")
+                }
+            }
+            Spacer()
+            PhotosPicker(selection: $pick, matching: .images) {
+                Label("Choose a sample photo", systemImage: "photo")
+            }
+        }
+        .font(Theme.text(14))
+        .foregroundStyle(Theme.muted)
+        .disabled(running)
+    }
+
     private var sendArea: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 10) {
             if let missing {
                 Text(missing)
-                    .font(.footnote)
+                    .font(Theme.text(13, .medium))
+                    .foregroundStyle(Theme.refused)
                     .accessibilityIdentifier("missing")
             }
-            HStack {
+            HStack(spacing: 16) {
                 if running {
                     Button("Stop waiting") { jobTask?.cancel() }
+                        .foregroundStyle(Theme.muted)
                 } else {
                     Button("Clear") { clearShape() }
+                        .foregroundStyle(Theme.muted)
                         .disabled(shape == nil)
                 }
-                Spacer()
-                Button("Blank this area") { startJob() }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(shape == nil || running || missing != nil)
+                Button { startJob() } label: {
+                    Theme.mainLabel(Text("Blank this area"))
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .disabled(shape == nil || running || missing != nil)
             }
+            .font(Theme.text(15))
             if let progress {
                 Text(progress)
-                    .font(.footnote)
-                    .multilineTextAlignment(.center)
+                    .font(Theme.text(13, .medium))
+                    .foregroundStyle(running ? Theme.waiting : Theme.refused)
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(running ? Theme.waitingBackground : Theme.refusedBackground, in: RoundedRectangle(cornerRadius: 12))
                     .accessibilityIdentifier("progress")
             }
         }
     }
 
+    /// Everything a viewer does not need, behind one small icon.
     private var settings: some View {
-        DisclosureGroup("Settings") {
-            VStack(spacing: 8) {
-                TextField("Service address", text: $serviceAddress)
-                    .textFieldStyle(.roundedBorder)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .keyboardType(.URL)
-                SecureField("Access word", text: $accessWord)
-                    .textFieldStyle(.roundedBorder)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                TextField("Web address", text: $webAddress)
-                    .textFieldStyle(.roundedBorder)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .keyboardType(.URL)
+        NavigationStack {
+            Form {
+                Section {
+                    TextField("Service address", text: $serviceAddress)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .keyboardType(.URL)
+                    SecureField("Access word", text: $accessWord)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                    TextField("Web address", text: $webAddress)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .keyboardType(.URL)
+                }
+                .listRowBackground(Theme.surface)
             }
-            .padding(.top, 8)
-            .disabled(running)
+            .font(Theme.text(15))
+            .scrollContentBackground(.hidden)
+            .background(Theme.background)
+            .navigationTitle("Settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { showSettings = false } label: { Image(systemName: "xmark") }
+                        .accessibilityLabel("Close")
+                }
+            }
         }
+        .tint(Theme.accent)
+        .presentationBackground(Theme.background)
     }
 
     /// The photo with the tiles, the area that takes the finger, and the finger's line on top.
@@ -164,7 +241,9 @@ struct AreaScreen: View {
         Image(uiImage: preview ?? photo.image)
             .resizable()
             .scaledToFit()
-            .accessibilityIdentifier("photo")
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.line, lineWidth: 1))
+            .accessibilityIdentifier("chosenPhoto")
             .overlay {
                 GeometryReader { view in
                     let scale = view.size.width / CGFloat(max(photo.width, 1))

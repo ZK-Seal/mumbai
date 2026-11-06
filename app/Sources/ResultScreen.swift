@@ -39,22 +39,32 @@ struct ResultScreen: View {
                     Image(uiImage: picture)
                         .resizable()
                         .scaledToFit()
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.line, lineWidth: 1))
                         .accessibilityIdentifier("resultPicture")
                 } else if problem {
                     Text("The picture could not be shown.")
+                        .font(Theme.text(15))
                 } else {
                     ProgressView()
                         .frame(maxWidth: .infinity)
                 }
                 if picture != nil, let link = AuthoriseLink.url(base: AuthoriseLink.base(fromSettings: webAddress), hash: result.hash,
                                                                 edit: "blank", width: width, height: height) {
-                    Button("Authorise this seal") { openURL(link) }
-                        .buttonStyle(.bordered)
-                        .frame(maxWidth: .infinity)
+                    Button { openURL(link) } label: {
+                        Text("Authorise this seal")
+                            .font(Theme.text(15, .medium))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 4)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
                 }
-                Button("Start over") { onDone() }
-                    .buttonStyle(.borderedProminent)
-                    .frame(maxWidth: .infinity)
+                Button { onDone() } label: {
+                    Theme.mainLabel(Text("Start over"))
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
             }
             .padding(16)
         }

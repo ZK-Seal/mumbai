@@ -11,6 +11,7 @@ settings:
     INFOPLIST_KEY_CFBundleDisplayName: Blank Demo
     INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
     INFOPLIST_KEY_NSCameraUsageDescription: "The app takes the photo you choose to send."
+    ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     PRODUCT_BUNDLE_IDENTIFIER: blank.demo.app
     MARKETING_VERSION: "0.1"
     CURRENT_PROJECT_VERSION: "1"
@@ -20,9 +21,13 @@ targets:
     platform: iOS
     sources:
       - Sources
+      - Assets.xcassets
+      - Fonts
     info:
       path: build/Info.plist
       properties:
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
         NSLocalNetworkUsageDescription: "The app sends your photo to the service on this network."
+        UIAppFonts:
+          - PublicSans-Variable.ttf

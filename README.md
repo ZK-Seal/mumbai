@@ -35,6 +35,10 @@ The app needs the backend's address and an access word. Enter them under Setting
 
 The app allows plain HTTP on a local network. Over plain HTTP the photo and the access word are not encrypted, so use a link you trust.
 
+## Fonts
+
+Public Sans, under the SIL Open Font License. The licence is beside it in `app/Fonts`.
+
 ## What the proof shows
 
 - The sealed picture follows from a signed original by the stated change.
