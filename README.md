@@ -9,7 +9,7 @@ The app's screens do not explain any of this, so the facts are here.
 ## What the app does
 
 1. You take a photo, or choose one. The app draws it at 2600 px on its long side at most.
-2. You draw a closed shape with a finger. A thin line follows the finger. When the finger lifts, the line goes away and the shape grows out to a 16 px grid, so the grid cells cover all of it. A line too small to hold a cell adds nothing. You can draw more shapes: overlapping ones join, "Undo" removes the last one and "Clear" removes them all.
+2. You draw a closed shape with a finger. A thin line follows the finger. When the finger lifts, the line goes away and the shape grows out to a 16 px grid, so the grid cells cover all of it. Two fingers zoom in, up to 5 times, and move the photo, and two quick taps go back. Lines land on the same grid at any zoom. A line too small to hold a cell adds nothing. You can draw more shapes: overlapping ones join, "Undo" removes the last one and "Clear" removes them all.
 3. The app covers each area on the screen, with a yellow mask or with mosaic tiles.
 4. "Blank this area" sends the photo and the area to the backend, which is a private dependency and is not in this repo. So the photo goes off the phone to our own server.
 5. The answer is a plain copy of the sealed picture, a hash and a verdict. The picture appears only after the check passed and the whole answer matches what the app sent. Any other answer shows one fixed line and no picture. The screen shows no line saying it passed. The sealed file cannot be downloaded. The backend removes it and the photo after the picture is fetched, or after 600 s if it is never fetched. A service stop in that window can leave them until the next start.

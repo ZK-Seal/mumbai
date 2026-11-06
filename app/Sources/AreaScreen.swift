@@ -24,8 +24,9 @@ struct AreaScreen: View {
     // The finger's line, in photo pixels. The shape is worked out from it.
     @State private var stroke: [CGPoint] = []
     @State private var drawing = false
-    /// True while a finger is down. It goes false by itself even when the system cuts a touch off.
-    @GestureState private var touching = false
+    /// How far the photo is zoomed and moved on the screen. Both only change the view, never a cell.
+    @State private var zoom: CGFloat = 1
+    @State private var pan = CGSize.zero
     /// Each closed line, in the order drawn.
     @State private var shapes: [PenShape] = []
     /// All of them as one. This is what is sent.
@@ -106,10 +107,6 @@ struct AreaScreen: View {
         .task(id: pick) { await load() }
         .onAppear { keepLaunchSettings() }
         .onChange(of: cover) { shapesChanged() }
-        .onChange(of: touching) {
-            // A touch that is cut off gets no end call, and the next line must not join this one.
-            if !touching { endLine() }
-        }
         .sheet(item: $finished) { job in
             ResultScreen(client: job.client, jobID: job.id, result: job.result, boxes: job.boxes, cell: job.cell,
                          width: job.width, height: job.height) {
@@ -253,8 +250,8 @@ struct AreaScreen: View {
         .presentationBackground(Theme.background)
     }
 
-    /// The photo with its cover, the area that takes the finger, and the finger's line on top.
-    /// The line shows only while the finger is down.
+    /// The photo with its cover and the finger's line, which all zoom and move together, and the area that takes
+    /// the fingers on top. The line shows only while the finger is down.
     private func canvas(_ photo: PreparedPhoto) -> some View {
         Image(uiImage: photo.image)
             .resizable()
@@ -272,33 +269,35 @@ struct AreaScreen: View {
                         .opacity(freshShown ? 1 : 0)
                 }
             }
+            .overlay {
+                GeometryReader { view in
+                    let scale = view.size.width / CGFloat(max(photo.width, 1))
+                    if drawing {
+                        Path { $0.addLines(stroke.map { CGPoint(x: $0.x * scale, y: $0.y * scale) }) }
+                            .stroke(.yellow, lineWidth: 2 / zoom)
+                    }
+                }
+            }
+            .scaleEffect(zoom, anchor: .topLeading)
+            .offset(pan)
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.line, lineWidth: 1))
             .accessibilityIdentifier("chosenPhoto")
             .overlay {
                 GeometryReader { view in
                     let scale = view.size.width / CGFloat(max(photo.width, 1))
-                    ZStack(alignment: .topLeading) {
-                        Color.clear
-                            .contentShape(Rectangle())
-                            .gesture(DragGesture(minimumDistance: 0)
-                                .updating($touching) { _, down, _ in down = true }
-                                .onChanged { drag in
-                                    guard !running else { return }
-                                    if !drawing {
-                                        stroke = []
-                                        progress = nil
-                                        drawing = true
-                                    }
-                                    stroke.append(CGPoint(x: drag.location.x / scale, y: drag.location.y / scale))
-                                }
-                                .onEnded { _ in endLine() })
-                        if drawing {
-                            Path { $0.addLines(stroke.map { CGPoint(x: $0.x * scale, y: $0.y * scale) }) }
-                                .stroke(.yellow, lineWidth: 2)
-                                .allowsHitTesting(false)
-                        }
-                    }
+                    PhotoTouches(zoom: $zoom, pan: $pan, canDraw: !running,
+                                 lineStarted: {
+                                     stroke = []
+                                     progress = nil
+                                     drawing = true
+                                 },
+                                 linePoint: { stroke.append(CGPoint(x: $0.x / scale, y: $0.y / scale)) },
+                                 lineEnded: { endLine() },
+                                 lineDropped: {
+                                     stroke = []
+                                     drawing = false
+                                 })
                 }
             }
     }
@@ -320,6 +319,8 @@ struct AreaScreen: View {
     /// After a result the photo goes too, so a second area of one photo is not one drag away.
     private func startOver() {
         finished = nil
+        zoom = 1
+        pan = .zero
         clearShape()
         source = nil
         photo = nil
@@ -404,6 +405,8 @@ struct AreaScreen: View {
     /// A new photo, from the picker or the camera.
     private func use(_ image: UIImage) {
         clearShape()
+        zoom = 1
+        pan = .zero
         source = image
         prepare()
         problem = photo == nil ? "Could not read this photo." : nil
