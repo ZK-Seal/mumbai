@@ -57,21 +57,23 @@ enum PictureUpload {
 
     /// Asks the web side to try the image's name again: the same token, with no body. The answer does not matter here,
     /// because the name is read from the seal's record.
-    static func askForName(base: String, hash: String, token: String) async {
+    static func askForName(base: String, hash: String, token: String, ticket: String?) async {
         guard let url = AuthoriseLink.address(base: base, path: "/api/picture/\(hash)") else { return }
         var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 60)
         request.httpMethod = "POST"
         request.setValue(token, forHTTPHeaderField: "x-picture-token")
+        request.setValue(ticket, forHTTPHeaderField: "x-seal-ticket")
         _ = try? await URLSession.shared.data(for: request)
     }
 
     /// True only if the web side says it kept the picture. The access word never goes with this.
-    static func send(_ jpeg: Data, base: String, hash: String, token: String) async -> Bool {
+    static func send(_ jpeg: Data, base: String, hash: String, token: String, ticket: String?) async -> Bool {
         guard let url = AuthoriseLink.address(base: base, path: "/api/picture/\(hash)") else { return false }
         var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 60)
         request.httpMethod = "POST"
         request.setValue("image/jpeg", forHTTPHeaderField: "Content-Type")
         request.setValue(token, forHTTPHeaderField: "x-picture-token")
+        request.setValue(ticket, forHTTPHeaderField: "x-seal-ticket")
         request.httpBody = jpeg
         guard let (data, response) = try? await URLSession.shared.data(for: request),
               (response as? HTTPURLResponse)?.statusCode == 200 else { return false }

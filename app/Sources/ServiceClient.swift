@@ -10,6 +10,7 @@ struct ServiceJob: Decodable {
     var origin: String?
     var seal_signer: String?
     var sha256: String?
+    var ticket: String?
     var width: Int?
     var height: Int?
 }

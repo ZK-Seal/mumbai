@@ -88,8 +88,9 @@ final class WorldStep {
     private var polling: Task<IDKitCompletionResult, Never>?
 
     /// With the person's session, the web side files this photo under their name. Without one, the photo stays unnamed.
-    func run(base: String, hash: String, event: String?, session: String?) async -> Outcome {
-        guard let start: Start = await post(base, "/api/world/request", body(hash: hash, event: event), limit: 15) else { return .useSheet }
+    /// The ticket says the service checked this hash. It goes both in the body and as a header.
+    func run(base: String, hash: String, event: String?, session: String?, ticket: String?) async -> Outcome {
+        guard let start: Start = await post(base, "/api/world/request", body(hash: hash, event: event, ticket: ticket), limit: 15, ticket: ticket) else { return .useSheet }
         // This answer carries the seal's record itself.
         if start.state == "authorised" { return .authorised(pictureToken: nil, image: nil) }
         guard start.state == "ready", start.signal == hash else { return .notAuthorised }
@@ -100,7 +101,7 @@ final class WorldStep {
         case .cannotStart: return .useSheet
         case .unreadable: return .notAuthorised
         }
-        let finish: Finish? = await post(base, "/api/world/verify", body(hash: hash, event: event, result: json, session: session), limit: 60)
+        let finish: Finish? = await post(base, "/api/world/verify", body(hash: hash, event: event, result: json, session: session, ticket: ticket), limit: 60, ticket: ticket)
         // This answer is trusted as it is. A second call could miss a fresh record.
         if let finish { return finish.state == "verified" ? .authorised(pictureToken: finish.token, image: Names.valid(finish.image)) : .notAuthorised }
         // With no answer at all, the record may still have been kept.
@@ -178,20 +179,22 @@ final class WorldStep {
     }
 
     /// The hash and event have a fixed form, so they need no escaping. The result stays exactly as the package wrote it.
-    private func body(hash: String, event: String?, result: String? = nil, session: String? = nil) -> String {
+    private func body(hash: String, event: String?, result: String? = nil, session: String? = nil, ticket: String? = nil) -> String {
         var parts = ["\"hash\":\"\(hash)\""]
         if let event { parts.append("\"event\":\"\(event)\"") }
         if let result { parts.append("\"result\":\(result)") }
         if let session { parts.append("\"session\":\"\(session)\"") }
+        if let ticket { parts.append("\"ticket\":\"\(ticket)\"") }
         return "{" + parts.joined(separator: ",") + "}"
     }
 
     /// A refusal has its own status, so the answer's words decide. The access word never goes with this.
-    private func post<Answer: Decodable>(_ base: String, _ path: String, _ body: String, limit: TimeInterval) async -> Answer? {
+    private func post<Answer: Decodable>(_ base: String, _ path: String, _ body: String, limit: TimeInterval, ticket: String? = nil) async -> Answer? {
         guard let url = AuthoriseLink.address(base: base, path: path) else { return nil }
         var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: limit)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(ticket, forHTTPHeaderField: "x-seal-ticket")
         request.httpBody = Data(body.utf8)
         guard let (data, _) = try? await URLSession.shared.data(for: request) else { return nil }
         return try? JSONDecoder().decode(Answer.self, from: data)

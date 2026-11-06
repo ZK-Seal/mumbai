@@ -4,6 +4,8 @@ import SwiftUI
 /// The result screen opens only with one, so nothing on it shows before a pass.
 struct JobResult {
     let hash: String
+    /// The service's word that it checked this hash. It goes to the web side with this seal's calls.
+    let ticket: String?
 
     init?(job: ServiceJob, boxes: [GridBox], width: Int, height: Int) {
         guard job.state == "done", job.edit == "blank", job.check == "OK",
@@ -13,6 +15,9 @@ struct JobResult {
               job.seal_signer == "not-on-a-trust-list",
               job.origin == "demo-certificate" else { return nil }
         self.hash = hash
+        ticket = job.ticket.flatMap { value in
+            value.count == 64 && value.allSatisfy { "0123456789abcdef".contains($0) } ? value : nil
+        }
     }
 }
 
@@ -175,7 +180,7 @@ struct ResultScreen: View {
         let base = AuthoriseLink.base(fromSettings: webAddress)
         Task {
             switch await world.run(base: base, hash: result.hash, event: AuthoriseLink.event(fromSettings: event),
-                                     session: Names.isSession(userSession) ? userSession : nil) {
+                                     session: Names.isSession(userSession) ? userSession : nil, ticket: result.ticket) {
             case .authorised(let token, let image):
                 authorising = .authorised
                 imageName = image
@@ -211,7 +216,7 @@ struct ResultScreen: View {
         let base = AuthoriseLink.base(fromSettings: webAddress)
         Task {
             let jpeg = await Task.detached(priority: .userInitiated) { PictureUpload.jpeg(from: picture) }.value
-            if let jpeg, await PictureUpload.send(jpeg, base: base, hash: result.hash, token: pictureToken) {
+            if let jpeg, await PictureUpload.send(jpeg, base: base, hash: result.hash, token: pictureToken, ticket: result.ticket) {
                 sending = .none
                 // The web side names the image only after it keeps the picture.
                 watchImage()
@@ -235,7 +240,7 @@ struct ResultScreen: View {
                     let since = pendingSince ?? Date()
                     pendingSince = since
                     if Date().timeIntervalSince(since) >= 90, let pictureToken {
-                        await PictureUpload.askForName(base: base, hash: result.hash, token: pictureToken)
+                        await PictureUpload.askForName(base: base, hash: result.hash, token: pictureToken, ticket: result.ticket)
                         pendingSince = Date()
                     }
                 }
