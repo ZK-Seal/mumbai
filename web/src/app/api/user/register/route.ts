@@ -2,19 +2,28 @@ import { after } from "next/server";
 import { addressOf, createUserName, userEns } from "@/lib/naming";
 import { isLabel, records, type UserRecord } from "@/lib/records";
 import { treeRoot, userName, userTaken } from "@/lib/tree";
-import { boundNullifier, userSignal, worldAccepts, worldConfig } from "@/lib/world";
+import {
+  boundNullifier,
+  sessionFor,
+  userSignal,
+  worldAccepts,
+  worldConfig,
+  type WorldConfig,
+} from "@/lib/world";
 
 // The name is created on chain after the answer is sent, given up to 50 s. 300 s is the most a
 // function may run on the Hobby plan with fluid compute, which new projects have.
 export const maxDuration = 300;
 
-function registered(user: UserRecord, ens: "pending" | "done") {
+/** `session` is what the client gives back with each photo, to tie it to this person. */
+function registered(config: WorldConfig, user: UserRecord, ens: "pending" | "done") {
   return Response.json({
     state: "registered",
     name: user.name,
     pass: user.pass,
     address: addressOf(user),
     ens,
+    session: sessionFor(config, user.pass),
   });
 }
 
@@ -31,6 +40,7 @@ function refused(reason: string, status: number, label: unknown) {
  * One person keeps one name: a pass that has a name already gets that name back, and no new one.
  * A label kept for another pass, or already on chain, is `taken`. A new name is kept in the store
  * at once and answered with `ens: "pending"`; it is created on chain after the answer is sent.
+ * Every registered answer carries `session` (see sessionFor), for the person's photos.
  */
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as
@@ -57,7 +67,8 @@ export async function POST(request: Request) {
     const ens = await userEns(mine.label);
     // A name kept here that is not on chain yet is asked for again, in case the first try failed.
     if (ens === "pending") after(() => createUserName(mine.label, mine.pass));
-    return registered(mine, ens);
+    console.log(`user/register: known label=${mine.label} session issued`);
+    return registered(config, mine, ens);
   }
   if (held || (await userTaken(label).catch(() => false))) return refused("taken", 409, label);
   const at = new Date().toISOString();
@@ -72,8 +83,9 @@ export async function POST(request: Request) {
   if (kept.pass !== nullifier) return refused("taken", 409, label);
   if (kept.label === label && kept.at === at) {
     after(() => createUserName(label, nullifier));
-    console.log(`user/register: registered label=${label}`);
-    return registered(kept, "pending");
+    console.log(`user/register: registered label=${label} session issued`);
+    return registered(config, kept, "pending");
   }
-  return registered(kept, await userEns(kept.label));
+  console.log(`user/register: known label=${kept.label} session issued`);
+  return registered(config, kept, await userEns(kept.label));
 }

@@ -244,8 +244,10 @@ export type EventGroup = { name: string | null; address: string | null; photos: 
 export type GroupUser = { name: string; address: string | null };
 
 /**
- * One group per pass, in the order each pass was first seen; each group oldest first, under the
- * user name and address `users` gives for its pass.
+ * One group per pass, in the order each pass was first seen. A named person's photos carry their
+ * join pass (given with a session), so they make one group; a photo authorised without a session
+ * carries its own proof's nullifier, so each such photo is a person of its own. Each group oldest
+ * first, under the user name and address `users` gives for its pass.
  */
 export function byPerson(
   seals: EventSeal[],
