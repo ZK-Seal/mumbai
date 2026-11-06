@@ -1,6 +1,6 @@
 import { deskName, deskOf, ethClient, vouch, type Vouch } from "@/lib/ens";
 import { isEvent, records, type SealRecord } from "@/lib/records";
-import { boundNullifier, isSealHash, worldAccepts, worldConfig } from "@/lib/world";
+import { actionFor, boundNullifier, isSealHash, worldAccepts, worldConfig } from "@/lib/world";
 
 /** `vouch` says what the desk answered about a name given with this authorisation, if any. */
 function verified(record: SealRecord, asked: Vouch | null = null) {
@@ -55,11 +55,12 @@ export async function POST(request: Request) {
     return storeFailed();
   }
   if (kept) return verified(kept);
-  const nullifier = boundNullifier(body.result, body.hash, config);
+  const action = actionFor(config, event);
+  const nullifier = boundNullifier(body.result, body.hash, config, action);
   if (nullifier === null) {
     return Response.json({ state: "refused", reason: "not-this-seal" }, { status: 422 });
   }
-  if (!(await worldAccepts(body.result, config))) {
+  if (!(await worldAccepts(body.result, config, action))) {
     return Response.json({ state: "refused", reason: "not-verified" }, { status: 422 });
   }
   let name: string | null = null;

@@ -38,9 +38,17 @@ export function isSealHash(value: unknown): value is string {
   return typeof value === "string" && /^[0-9a-f]{64}$/.test(value);
 }
 
+/**
+ * The World action for one request: one action per event, so a proof made for one event cannot
+ * stand for another, or for none. With no event it is the plain WORLD_ACTION.
+ */
+export function actionFor(config: WorldConfig, event: string | null): string {
+  return event === null ? config.action : `${config.action}-${event}`;
+}
+
 /** The signed context the World app needs before it makes a proof. Valid for five minutes. */
-export function requestContext(config: WorldConfig) {
-  const signed = signRequest({ signingKeyHex: config.signingKey, action: config.action, ttl: 300 });
+export function requestContext(config: WorldConfig, action: string) {
+  const signed = signRequest({ signingKeyHex: config.signingKey, action, ttl: 300 });
   return {
     rp_id: config.rpId,
     nonce: signed.nonce,
@@ -58,10 +66,17 @@ export function sealSignal(hash: string): string {
 type ResponseItem = { identifier?: unknown; signal_hash?: unknown; nullifier?: unknown };
 
 /**
- * Picks the one answer we asked for out of a proof result, and checks it is tied to this seal.
- * Returns its nullifier, or null if the result is not what was asked.
+ * Picks the one answer we asked for out of a proof result, and checks it is tied to this seal
+ * and made for this action. World checks the proof against the action and signal the result
+ * names, so both must be ours. Returns its nullifier, or null if the result is not what was asked.
  */
-export function boundNullifier(result: unknown, hash: string, config: WorldConfig): string | null {
+export function boundNullifier(
+  result: unknown,
+  hash: string,
+  config: WorldConfig,
+  action: string,
+): string | null {
+  if ((result as { action?: unknown })?.action !== action) return null;
   const responses = (result as { responses?: unknown })?.responses;
   if (!Array.isArray(responses) || responses.length !== 1) return null;
   const item = responses[0] as ResponseItem;
@@ -72,8 +87,15 @@ export function boundNullifier(result: unknown, hash: string, config: WorldConfi
   return item.nullifier;
 }
 
-/** Asks World whether the proof is good. True only for a clear yes in the environment we expect. */
-export async function worldAccepts(result: unknown, config: WorldConfig): Promise<boolean> {
+/**
+ * Asks World whether the proof is good. True only for a clear yes in the environment we expect,
+ * and, when World names the action it checked, for this action.
+ */
+export async function worldAccepts(
+  result: unknown,
+  config: WorldConfig,
+  action: string,
+): Promise<boolean> {
   let response: Response;
   try {
     response = await fetch(`https://developer.world.org/api/v4/verify/${config.rpId}`, {
@@ -87,7 +109,8 @@ export async function worldAccepts(result: unknown, config: WorldConfig): Promis
   }
   if (!response.ok) return false;
   const answer = (await response.json().catch(() => null)) as
-    | { success?: unknown; environment?: unknown }
+    | { success?: unknown; environment?: unknown; action?: unknown }
     | null;
+  if (answer?.action !== undefined && answer.action !== action) return false;
   return answer?.success === true && answer.environment === config.environment;
 }

@@ -1,5 +1,5 @@
 import { isEvent, records, type SealRecord } from "@/lib/records";
-import { isSealHash, requestContext, worldConfig } from "@/lib/world";
+import { actionFor, isSealHash, requestContext, worldConfig } from "@/lib/world";
 
 /**
  * Starts one authorisation: hands the page what the World app needs for this seal. A seal that
@@ -36,13 +36,14 @@ export async function POST(request: Request) {
   if (!config) {
     return Response.json({ state: "refused", reason: "not-set-up" }, { status: 503 });
   }
+  const action = actionFor(config, isEvent(body.event) ? body.event : null);
   return Response.json({
     state: "ready",
     app_id: config.appId,
-    action: config.action,
+    action,
     environment: config.environment,
     credential: config.credential,
     signal: body.hash,
-    rp_context: requestContext(config),
+    rp_context: requestContext(config, action),
   });
 }
