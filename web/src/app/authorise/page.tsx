@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { deskName } from "@/lib/ens";
 import { records, type SealRecord } from "@/lib/records";
 import { gate } from "@/lib/signin";
 import { isSealHash } from "@/lib/world";
@@ -57,6 +58,8 @@ async function SealPart({ searchParams }: { searchParams: Promise<Query> }) {
       width={seal.width}
       height={seal.height}
       pass={kept?.pass ?? null}
+      member={kept?.name ?? null}
+      desk={deskName()}
       signin={signin}
       word={readWord(query.signin)}
     />

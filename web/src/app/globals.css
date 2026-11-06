@@ -211,3 +211,29 @@ a.button:focus-visible {
 .others time {
   font-size: 0.875rem;
 }
+
+.field {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0 0 1rem;
+}
+
+.field span {
+  color: var(--soft);
+  font-size: 0.875rem;
+}
+
+input[type="text"] {
+  font: inherit;
+  min-height: 2.75rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  background: transparent;
+  color: var(--ink);
+}
+
+input[type="text"]:focus-visible {
+  outline: 3px solid var(--ink);
+  outline-offset: 2px;
+}

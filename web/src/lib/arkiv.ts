@@ -6,6 +6,7 @@ import { getAddress, http, isAddress, type Address, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import {
   isAccount,
+  keptName,
   newestFirst,
   PASS_LIST_LIMIT,
   StoreError,
@@ -17,7 +18,8 @@ import { isSealHash } from "@/lib/world";
 
 /**
  * One authorised seal on Arkiv. Every column is indexed, because each one is something a reader
- * looks up by: the seal, the person's pass, the account, the kind of check, and the time.
+ * looks up by: the seal, the person's pass, the account, the kind of check, the time, and the
+ * person's name at a desk. The name is left out when there is none, as in records kept before it.
  */
 export const Seals = defineSchema("blank-demo.seals", {
   hash: str().indexed(),
@@ -25,6 +27,7 @@ export const Seals = defineSchema("blank-demo.seals", {
   account: str().indexed(),
   credential: str().indexed(),
   at: u64().indexed(),
+  name: str().indexed().optional(),
 });
 
 // A record outlives the event by weeks, but is not kept forever.
@@ -66,6 +69,7 @@ type Row = {
   account: { value: string };
   credential: { value: string };
   at: { value: bigint };
+  name?: { value: string };
 };
 
 /** A row as a record, or null if it does not say what a record must. */
@@ -80,6 +84,7 @@ function toRecord(row: Row): SealRecord | null {
     pass: row.pass.value,
     credential,
     account: isAccount(account) ? account : null,
+    name: keptName(row.name?.value),
     at: new Date(ms).toISOString(),
   };
 }
@@ -115,7 +120,15 @@ export class ArkivStore implements RecordStore {
   private async rows(hash: string): Promise<Row[]> {
     try {
       const page = await this.reader
-        .select({ $key: true, hash: true, pass: true, account: true, credential: true, at: true })
+        .select({
+          $key: true,
+          hash: true,
+          pass: true,
+          account: true,
+          credential: true,
+          at: true,
+          name: true,
+        })
         .from(Seals)
         .where(eq("hash", hash))
         .ownedBy(this.settings.owner)
@@ -185,6 +198,7 @@ export class ArkivStore implements RecordStore {
           account: record.account ?? "",
           credential: record.credential,
           at: u64(Date.parse(record.at)),
+          ...(keptName(record.name) ? { name: record.name as string } : {}),
         },
         { expiration: ExpirationTime.fromDays(RECORD_LIFETIME_DAYS), flags: { readonly: true } },
       );

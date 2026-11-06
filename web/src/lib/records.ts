@@ -2,18 +2,21 @@ import { randomBytes } from "node:crypto";
 import { mkdir, readdir, readFile, link, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { ArkivStore, arkivSettings } from "@/lib/arkiv";
+import { normalName } from "@/lib/ens";
 import type { Credential } from "@/lib/world";
 import { isSealHash } from "@/lib/world";
 
 /**
  * One authorised seal. `pass` is the person's pass number; one person may authorise many seals.
  * `account` is a short name for the World account that was signed in, when sign-in is set up.
+ * `name` is the person's name at a desk, kept only when the desk vouched for it at the time.
  */
 export type SealRecord = {
   hash: string;
   pass: string;
   credential: Credential;
   account: string | null;
+  name: string | null;
   at: string;
 };
 
@@ -56,6 +59,11 @@ export function isAccount(value: unknown): value is string {
   return typeof value === "string" && /^[0-9a-f]{16}$/.test(value);
 }
 
+/** A name kept with a record: in normal form already, or it is not kept. */
+export function keptName(value: unknown): string | null {
+  return typeof value === "string" && normalName(value) === value ? value : null;
+}
+
 function readRecord(text: string, hash: string): SealRecord | null {
   let value: Partial<SealRecord>;
   try {
@@ -68,7 +76,8 @@ function readRecord(text: string, hash: string): SealRecord | null {
   }
   if (value.credential !== "human" && value.credential !== "selfie") return null;
   const account = isAccount(value.account) ? value.account : null;
-  return { hash, pass: value.pass, credential: value.credential, account, at: value.at };
+  const name = keptName(value.name);
+  return { hash, pass: value.pass, credential: value.credential, account, name, at: value.at };
 }
 
 /**
@@ -102,7 +111,10 @@ export class FileStore implements RecordStore {
     await mkdir(this.dir, { recursive: true });
     const temp = path.join(this.dir, `.${record.hash}.${randomBytes(6).toString("hex")}.tmp`);
     const { hash, pass, credential, account, at } = record;
-    await writeFile(temp, JSON.stringify({ hash, pass, credential, account, at }), { flag: "wx" });
+    const name = keptName(record.name);
+    await writeFile(temp, JSON.stringify({ hash, pass, credential, account, name, at }), {
+      flag: "wx",
+    });
     try {
       await link(temp, final);
     } catch (error) {
@@ -113,7 +125,7 @@ export class FileStore implements RecordStore {
     } finally {
       await unlink(temp).catch(() => {});
     }
-    return { hash, pass, credential, account, at };
+    return { hash, pass, credential, account, name, at };
   }
 
   async byPass(pass: string): Promise<PassSeal[]> {

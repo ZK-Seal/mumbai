@@ -19,6 +19,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ has
     pass: record.pass,
     credential: record.credential,
     account: record.account,
+    name: record.name,
     at: record.at,
   });
 }

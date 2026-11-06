@@ -30,11 +30,23 @@ type Ready = {
   rp_context: RpContext;
 };
 
+/** What the desk answered about the name given with this authorisation. */
+type Vouch = "vouched" | "not-vouched" | "unreachable";
+
+/** A verified authorisation, with the person's name at a desk when the desk vouched for it. */
+type Verified = {
+  pass: string;
+  member: string | null;
+  vouch: Vouch | null;
+  /** The desk that was asked, or the one the kept name belongs to. */
+  desk: string | null;
+};
+
 type Phase =
   | { name: "idle" }
   | { name: "asking" }
   | { name: "open"; ready: Ready }
-  | { name: "verified"; pass: string }
+  | ({ name: "verified" } & Verified)
   | { name: "denied" }
   | { name: "not-set-up" };
 
@@ -85,6 +97,34 @@ function readPass(value: unknown): string | null {
     : null;
 }
 
+/** A name as the server sent it back; only ever shown as text. */
+function readText(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 && value.length <= 255 ? value : null;
+}
+
+function readVouch(value: unknown): Vouch | null {
+  return value === "vouched" || value === "not-vouched" || value === "unreachable" ? value : null;
+}
+
+/** The verified parts of a server answer that carries a pass; null if it has no good pass. */
+function readVerified(answer: unknown, pass: unknown): Verified | null {
+  const a = answer as { name?: unknown; desk?: unknown; vouch?: unknown } | null;
+  const kept = readPass(pass);
+  if (!kept) return null;
+  const member = readText(a?.name);
+  return {
+    pass: kept,
+    member,
+    vouch: member ? "vouched" : readVouch(a?.vouch),
+    desk: readText(a?.desk),
+  };
+}
+
+/** The desk a name belongs to: everything after its first label. */
+function deskOf(name: string): string {
+  return name.slice(name.indexOf(".") + 1);
+}
+
 function shorten(pass: string): string {
   return pass.length <= 24 ? pass : `${pass.slice(0, 12)}…${pass.slice(-8)}`;
 }
@@ -105,6 +145,10 @@ export function Authorise(props: {
   height: number;
   /** The pass already on record for this seal, if a person authorised it before. */
   pass: string | null;
+  /** The name kept with that record, if a desk vouched for it. */
+  member: string | null;
+  /** The desk this server asks about names, if one is set up. */
+  desk: string | null;
   signin: SigninNow;
   word: SigninWord | null;
 }) {
@@ -130,9 +174,19 @@ export function Authorise(props: {
   }
   const [phase, setPhase] = useState<Phase>(() => {
     const kept = readPass(props.pass);
-    return kept ? { name: "verified", pass: kept } : { name: "idle" };
+    const member = readText(props.member);
+    return kept
+      ? {
+          name: "verified",
+          pass: kept,
+          member,
+          vouch: member ? "vouched" : null,
+          desk: member ? deskOf(member) : null,
+        }
+      : { name: "idle" };
   });
-  const pass = useRef<string | null>(null);
+  const [given, setGiven] = useState("");
+  const pass = useRef<Verified | null>(null);
 
   async function start() {
     setPhase({ name: "asking" });
@@ -145,9 +199,9 @@ export function Authorise(props: {
       return;
     }
     const word = answer as { state?: unknown; reason?: unknown; pass?: unknown } | null;
-    const kept = word?.state === "authorised" ? readPass(word.pass) : null;
+    const kept = word?.state === "authorised" ? readVerified(word, word.pass) : null;
     if (kept) {
-      setPhase({ name: "verified", pass: kept });
+      setPhase({ name: "verified", ...kept });
       return;
     }
     if (word?.reason === "sign-in") {
@@ -163,19 +217,21 @@ export function Authorise(props: {
   }
 
   async function check(result: IDKitResult) {
-    const answer = (await post("/api/world/verify", { hash, result })) as {
+    const name = given.trim();
+    const body = name ? { hash, result, name } : { hash, result };
+    const answer = (await post("/api/world/verify", body)) as {
       state?: unknown;
       reason?: unknown;
       pass?: unknown;
     } | null;
     signinRefused.current = answer?.reason === "sign-in";
-    const verified = answer?.state === "verified" ? readPass(answer.pass) : null;
+    const verified = answer?.state === "verified" ? readVerified(answer, answer.pass) : null;
     if (verified === null) throw new Error("not verified");
     pass.current = verified;
   }
 
   function done() {
-    if (pass.current) setPhase({ name: "verified", pass: pass.current });
+    if (pass.current) setPhase({ name: "verified", ...pass.current });
     else if (signinRefused.current) needSignin();
     else setPhase({ name: "denied" });
   }
@@ -214,6 +270,7 @@ export function Authorise(props: {
               {shorten(phase.pass)}
             </span>
           </p>
+          <DeskLine verified={phase} />
           <OtherSeals key={phase.pass} pass={phase.pass} hash={hash} />
         </>
       ) : phase.name === "denied" ? (
@@ -228,9 +285,28 @@ export function Authorise(props: {
           World ID is not set up on this server yet.
         </p>
       ) : signin.standing === "not-set-up" || signin.standing === "fresh" ? (
-        <button type="button" onClick={start} disabled={phase.name !== "idle"}>
-          Authorise with World ID
-        </button>
+        <>
+          {props.desk && (
+            <label className="field">
+              <span>Your name at the desk (for example reporter.{props.desk})</span>
+              <input
+                type="text"
+                name="desk-name"
+                autoComplete="off"
+                autoCapitalize="none"
+                spellCheck={false}
+                maxLength={255}
+                placeholder={`reporter.${props.desk}`}
+                value={given}
+                onChange={(event) => setGiven(event.target.value)}
+                disabled={phase.name !== "idle"}
+              />
+            </label>
+          )}
+          <button type="button" onClick={start} disabled={phase.name !== "idle"}>
+            Authorise with World ID
+          </button>
+        </>
       ) : null}
 
       {phase.name === "open" && (
@@ -254,6 +330,29 @@ export function Authorise(props: {
       )}
     </>
   );
+}
+
+/** One fixed sentence about the person's name at the desk, when a name was kept or asked for. */
+function DeskLine({ verified }: { verified: Verified }) {
+  const desk = verified.desk ?? "the desk";
+  if (verified.member) {
+    return (
+      <p className="state good">
+        Sealed by {verified.member}, a member of {deskOf(verified.member)}.
+      </p>
+    );
+  }
+  if (verified.vouch === "not-vouched") {
+    return <p className="state bad">This name is not vouched for by {desk}.</p>;
+  }
+  if (verified.vouch === "unreachable") {
+    return (
+      <p className="state bad">
+        The member list of {desk} cannot be read just now, so no name was kept.
+      </p>
+    );
+  }
+  return null;
 }
 
 /** Sign in with World: shown first, before a seal can be authorised. */

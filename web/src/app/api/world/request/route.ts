@@ -24,6 +24,7 @@ export async function POST(request: Request) {
       pass: kept.pass,
       credential: kept.credential,
       account: kept.account,
+      name: kept.name,
       at: kept.at,
     });
   }
