@@ -34,8 +34,8 @@ function storeFailed() {
 }
 
 /**
- * Finishes one authorisation. The proof must be tied to this seal's hash, and World must
- * accept it. Every answer is a word from a short fixed list. The first authorisation of a seal
+ * Finishes one authorisation. The proof must be tied to this seal's hash and made for the
+ * action the request route handed out (see actionFor), and World must accept it. Every answer is a word from a short fixed list. The first authorisation of a seal
  * is kept; a later one gets the kept record back and changes nothing. No account is kept with
  * the record.
  *

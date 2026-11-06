@@ -10,6 +10,8 @@ export type WorldConfig = {
   rpId: string;
   signingKey: string;
   action: string;
+  /** Whether each event gets an action of its own (WORLD_EVENT_ACTIONS=on). Off by default. */
+  eventActions: boolean;
   environment: Environment;
   credential: Credential;
 };
@@ -28,6 +30,7 @@ export function worldConfig(): WorldConfig | null {
     rpId,
     signingKey,
     action: process.env.WORLD_ACTION || "authorise-seal",
+    eventActions: process.env.WORLD_EVENT_ACTIONS === "on",
     environment:
       environment === "production" || environment === "sandbox" ? environment : "staging",
     credential: process.env.WORLD_CREDENTIAL === "selfie" ? "selfie" : "human",
@@ -40,11 +43,14 @@ export function isSealHash(value: unknown): value is string {
 }
 
 /**
- * The World action for one request: one action per event, so a proof made for one event cannot
- * stand for another, or for none. With no event it is the plain WORLD_ACTION.
+ * The World action for one request. A person's pass is drawn from the action, so one action for
+ * everything gives one person the same pass on every seal and on their user name: that is what
+ * ties a photo to its user. This is the default. With WORLD_EVENT_ACTIONS=on each event has an
+ * action of its own instead, so a proof made for one event cannot stand for another, but then a
+ * person's passes differ from event to event and no photo can be tied to a user name.
  */
 export function actionFor(config: WorldConfig, event: string | null): string {
-  return event === null ? config.action : `${config.action}-${event}`;
+  return event === null || !config.eventActions ? config.action : `${config.action}-${event}`;
 }
 
 /** The signed context the World app needs before it makes a proof. Valid for five minutes. */
