@@ -13,7 +13,7 @@ And at a protest, one person with several phones can make it look as if many peo
 
 This demo answers two questions about an event's photos:
 
-- **What was changed?** Each picture is a proven edit of a signed original (our test key in this demo).
+- **What was changed?** Each seal is a proven edit of a signed original (our test key in this demo). The picture beside it is the uploader's word.
 - **How many people stand behind them?** Each name was proved once through World to be one human, so the gallery can say "N photos from M people".
 
 This is a demo. It is never safe for real protesters. See "What is true in this demo".
@@ -37,9 +37,9 @@ This is a demo. It is never safe for real protesters. See "What is true in this 
          v
   THE WEB SIDE
   4. Check the proof with World, and the session
-  5. Make the person's name and the picture's name    ---->  ENS
-  6. Keep small records                               ---->  ARKIV
-  7. Keep the picture                                 ---->  SWARM
+  5. Keep small records                               ---->  ARKIV
+  6. Keep the picture                                 ---->  SWARM
+  7. Make the person's name and the picture's name    ---->  ENS
 
   THE GALLERY PAGE, in any browser, with no server of ours
   8. Read the records from ARKIV and the pictures from SWARM.
@@ -63,7 +63,16 @@ This is a demo. It is never safe for real protesters. See "What is true in this 
 
 ## What each partner adds, and what its prize asks
 
-One section each. In the tables, **There** means it is done today. **Not there** means it is not done yet. TO FILL marks a fact only Armanc has.
+One section each. In the tables, **There** means it is done today. **Not there** means it is not done yet. TO FILL marks a fact we do not have yet.
+
+**Words used here.**
+
+- **Pass:** the number from a person's World proof. It stays the same for one person and one action, and it does not say who they are.
+- **Session:** a string our server gives the app when a person gets a name. It stands for that name.
+- **Fork:** a local copy of mainnet, for trying things with no real money.
+- **Custodial:** our server holds the keys, not the person.
+- **Registry:** the contract that lists the names at one level of the tree.
+- **Resolver:** the contract that holds a name's records.
 
 ## ENS
 
@@ -73,7 +82,7 @@ Prize: Best Integration of ENSv2 into an Existing Project.
 
 ```text
 <root>.eth
-├─ users.<root>.eth                        a name here = one World proof, one human
+├─ users.<root>.eth                        a name here = one World proof (test identities in this demo)
 │  ├─ <nickname>.users.<root>.eth  <---->  address A     name and address point to each other
 │  └─ <nickname>.users.<root>.eth  <---->  address B
 └─ events.<root>.eth
@@ -84,14 +93,13 @@ Prize: Best Integration of ENSv2 into an Existing Project.
 
 Once the root switch is real, a person's name is `<nickname>.users.zk-seal.eth`. That switch is not there yet: `zk-seal.eth` is registered on mainnet, and the tree is not under it. The web side's root is one setting, `DESK_NAME`, with `armanc.eth` as its default. The app shows whatever name the web side returns.
 
-**What it adds to the project.**
+**What it adds to the project.** So far the tree ran only on a local fork of mainnet.
 
-- The tree itself says what passed the checks. Anyone can read it without asking us.
+- The tree itself says which names passed World and what they published. Once on mainnet, anyone can read the tree.
 - A person and a picture each get a name a reader can use, in place of a long hash.
 - In ENSv2 a name can have its own registry. So each level here is its own contract: one registry for people, one for events, and one for each event's pictures. A new event is one new registry, and its names stay apart from every other event's.
 - One resolver of ours holds the records: the Swarm reference, the seal's hash and the person's name. So a name leads to its picture.
 - A person's address points back to their name as a true ENS primary name, set through the default reverse registrar. So a wallet or a site can show it.
-- The root's owner wallet holds every role on each registry, so it can take any part over at any time.
 
 **What its prize asks for, and where each ask is met.**
 
@@ -101,13 +109,16 @@ Once the root switch is real, a person's name is `<nickname>.users.zk-seal.eth`.
 | "integrate it into an existing project" | zkSeal is the existing project. The tree is in `web/src/lib/tree.ts` | There |
 | "It should be clear how ENSv2 improves the project" | "What it adds to the project", above | There |
 | "not just include hard-coded values" | A name comes from a real check: `registerUser` in `web/src/lib/tree.ts`. The gallery starts from six names, and each shows as real only with a row on Arkiv. Any other name found in a real row is listed after them | There in the code. **Not there** on mainnet |
+| "not just a cosmetic add-on" | Names come from real checks. But the gallery reads its names from Arkiv, not from ENS | A public page that reads ENS: **not there** |
 | "must have a link to a live demo" | The demo link at the top | **Not there** |
 | "code needs to be open source and accessible on Github" | This repo, under MIT | There |
 
 **Its limits.**
 
 - Our server is the registrar. It checks World, then our bot wallet makes the name. No contract makes that check today.
-- Our server derives each person's key from their pass and a server secret, so it can sign for every person. In the intended design the key stays on the phone.
+- Our server derives each person's key from their pass and the bot's key. One leak gives both. Our server can sign for every person. In the intended design the key stays on the phone.
+- The owner and the bot both hold every role today, so the bot could remove the owner.
+- A picture's name shows that a named person filed that hash. Our server does not check the seal, so the hash may be made up.
 - An event's ENS name opening the gallery page: **not there**.
 - Anyone can choose any name the web side accepts, so a name can look like another person's. A name shows nothing about who chose it.
 - A name that starts with `test-` stays out of the gallery's list, because our trial rows start that way.
@@ -162,7 +173,7 @@ You should see six rows, of two kinds. These are test rows. TO FILL (Armanc): th
 | `schema.md`, `friction.md`, `reach.md`, `why-arkiv.md`, `how-you-use-arkiv.md` | `/arkiv/` | **Not there** yet |
 | Answers "with links, numbers or a query we can run", from real rows | `/arkiv/` | **Not there**. Only test rows exist, under `test-run-a` and `test-run-b` |
 | "A public repo with an open-source license" | This repo, under MIT | There |
-| A statement of how tools were used, which ETHGlobal's rules ask for | This README and the form | **Not there**. The team writes it |
+| "Say how you used AI, as ETHGlobal's rules require" | "How we used AI", below, and the form | **Not there**. Serhas writes it |
 
 ## Swarm
 
@@ -175,7 +186,7 @@ Prize: the Arkiv + Swarm bonus (existing projects).
 - An Arkiv row is small: its binary data is limited to 128 KiB, and our pictures can reach 3 MiB. So the file goes to Swarm, and Arkiv keeps where it is and its hash.
 - Anyone can fetch a picture from Swarm without our server, and compare it with the hash on Arkiv.
 
-**Its limit.** We use the public gateway. We own no batch and did not buy one, so the gateway stores the file with its own stamp. How long it keeps a file is not promised, so a pointer can outlive its picture.
+**Its limit.** We use the public gateway. We own no batch and did not buy one, so the gateway stores the file with its own stamp. How long it keeps a file is not promised, so a pointer can outlive its picture. Swarm's notes say a fresh upload can show "Forbidden" on a public gateway.
 
 **What its prize asks for, and where each ask is met.**
 
@@ -183,12 +194,12 @@ Prize: the Arkiv + Swarm bonus (existing projects).
 | --- | --- | --- |
 | "uses both Arkiv and Swarm" | The picture on Swarm, the pointer on Arkiv | There |
 | `swarm.md` | `/arkiv/swarm.md` | **Not there** yet |
-| "say what existed before the event" | "Old work and new work", below, and the line above | There |
-| "which entity field holds the Swarm reference" | `ref` on `blank-demo.pictures`, in `web/src/lib/arkiv.ts` | There |
+| "say what existed before the event" | "Old work and new work", below, and the line above | There in this README. **Not there** yet in `/arkiv/swarm.md`, where the prize wants it |
+| "which entity field holds the Swarm reference" | `ref` on `blank-demo.pictures`, in `web/src/lib/arkiv.ts` | There in this README. **Not there** yet in `/arkiv/swarm.md`, where the prize wants it |
 | "One Arkiv entity key and the Swarm reference it points to, with a link" | The key is the picture pointer in the Arkiv section | **Not there**. TO FILL (Armanc): the Swarm reference |
 | "postage stamp batch ID" and "the wallet that bought it (or who gave you the batch)" | `web/src/lib/swarm.ts` sends 64 zeros, and the gateway uses its own stamp | **Not there**. We own no batch |
-| "the Bee node or service you uploaded through" | The public gateway, `https://api.gateway.ethswarm.org`, in `web/src/lib/swarm.ts` | There |
-| "The files in your repo that upload to Swarm and read from it" | Upload: `uploadPicture` in `web/src/lib/swarm.ts`, and `web/src/app/api/picture/[hash]/route.ts`. Read: `gallery/index.html`, and `web/src/app/event/[event]/page.tsx` | There |
+| "the Bee node or service you uploaded through" | The public gateway, `https://api.gateway.ethswarm.org`, in `web/src/lib/swarm.ts` | There in this README. **Not there** yet in `/arkiv/swarm.md`, where the prize wants it |
+| "The files in your repo that upload to Swarm and read from it" | Upload: `uploadPicture` in `web/src/lib/swarm.ts`, and `web/src/app/api/picture/[hash]/route.ts`. Read: `gallery/index.html`, and `web/src/app/event/[event]/page.tsx` | There in this README. **Not there** yet in `/arkiv/swarm.md`, where the prize wants it |
 | Steps for one upload and one read, and "what we should see" | `/arkiv/swarm.md` | **Not there**. The real output is not pasted yet |
 | "The moment in your demo video where Swarm is used" | The video | **Not there**. It is not filmed yet |
 | "What got in your way with Swarm" | `/arkiv/swarm.md` | **Not there** yet |
@@ -198,7 +209,7 @@ Prize: the Arkiv + Swarm bonus (existing projects).
 
 Prize: [Cont] Best Use of IDKit.
 
-**How we use it.** The Publish button asks for Proof of Human once, to get a name. Later photos under that name need no second World trip. A photo with no session has its own proof. The app opens the World ID app through World's Swift package, IDKit, pinned to 4.2.0. The web side checks each proof with World before it writes anything (`web/src/lib/world.ts`).
+**How we use it.** A named person passes World once, for the name. Their later photos have no World step. A photo with no name still has its own World proof each time. The app opens the World ID app through World's Swift package, IDKit, pinned to 4.2.0. The web side checks each proof with World before it writes anything (`web/src/lib/world.ts`).
 
 **What it adds to the project.** Without World, one person with several phones looks like a crowd. With it, a page can count how many people stand behind an event's photos, and it does not need to know who they are.
 
@@ -210,12 +221,13 @@ Prize: [Cont] Best Use of IDKit.
 
 **One proof per name.** A person proves once, at join. A session from our server then ties each later photo to that name. That link is our server's word, and no World proof covers that photo. A photo with no session has its own World action, drawn from its hash, because the World app makes one proof per person and action, and refuses a second.
 
-**The other path.** A cancelled or refused proof shows "Not authorised" with World's word. The picture is not sent, and no name is made.
+**The other path.** A cancelled or refused proof gives no name and sends no picture. On the name step, the app shows "World did not finish" with World's word. On a photo with no name, it shows "Not authorised" with World's word.
 
 **Debrief.**
 
 - Time to first success: TO FILL (Armanc).
 - Friction: the simulator accepted a second proof for one action, but the World app refuses it with `nullifier_replayed`. We found this only on a real phone, then gave each photo its own action. One sandbox account showed "V4 protocol and credential issuance must both be enabled for this account" and could not be used. A new sandbox credential took up to an hour. Two proofs sent at the same instant: one was refused, then the same proof was accepted a moment later.
+- Our own session, not World's: World's docs say "Do not carry over a uniqueness nullifier as a persistent user identifier", and they offer session proofs. Those do not support the older proofs the sandbox gives. So we use our own session, and this differs from World's docs.
 - Missing: TO FILL (Armanc).
 - The one improvement with the greatest impact: TO FILL (Armanc).
 
@@ -228,7 +240,7 @@ Prize: [Cont] Best Use of IDKit.
 | "the specific product event requiring trust" | "The moment that needs trust", above | There |
 | "the minimum sufficient assurance" | "The credential", above | **Not there**. TO FILL (Armanc) |
 | "Demonstrate a successful verification" | The video | **Not there**. It is not filmed yet |
-| "one meaningful alternative path" | `app/Sources/ResultScreen.swift` shows "Not authorised" with World's word | There in the code. **Not there** in the video |
+| "one meaningful alternative path" | `app/Sources/NameScreen.swift` and `app/Sources/ResultScreen.swift` show World's word | There in the code. **Not there** in the video |
 | Debrief: "friction encountered" | "Debrief", above | There |
 | Debrief: "time to first success" | "Debrief", above | **Not there**. TO FILL (Armanc) |
 | Debrief: "missing capability or documentation", and "the one improvement" | "Debrief", above | **Not there**. TO FILL (Armanc) |
@@ -240,6 +252,10 @@ Prize: [Cont] Best Use of IDKit.
 | **Old, before the event** | zkSeal itself: an older private product that proves how an edited photo follows from a signed original, with the proved grey edit. The zkSeal logo. The design of our earlier app | The product is not in this repo. The logo files are |
 | **New at ETHGlobal Mumbai, open** | The app, the web side, the gallery page, the contracts, and all use of World, ENS, Arkiv and Swarm | This repo. Its first commit is from 05.11.2026 |
 | **New at ETHGlobal Mumbai, closed** | A service that runs the older product for the app | Not in this repo, because it uses that private product. The app talks to it over HTTP with an access word |
+
+## How we used AI
+
+TO FILL (Serhas): he writes this section.
 
 ## What is true in this demo
 
@@ -258,22 +274,23 @@ Prize: [Cont] Best Use of IDKit.
 **Who decides.**
 
 - The registrar is our server, not a contract. The server checks the World proof with World, then our bot wallet makes the name.
-- The contracts are written and fork-tested, not wired. The live path does not send through them. Their check is a signature from a key on our server, not a check of the proof. A contract that checks a World proof itself is written for later.
+- The contracts are written and fork-tested, not wired. The path we run does not send through them. Their check is a signature from a key on our server, not a check of the proof. A contract that checks a World proof itself is written for later.
 - No contract checks a seal's proof. That proof's size and cost rule it out on mainnet today.
 - The backend checks the seal. The web server cannot see the sealed file.
 - An image's name means this: a person with a World-proven name sent this seal's hash and this picture, through our server's session. No World proof is bound to that seal's hash.
 - Whoever holds a person's session can publish under that name.
+- **Our server does not check the seal. So a named person can file a made-up hash, with no World step.**
 - The authorise page checks only the hash's format, so anyone can type a made-up hash and authorise it.
 - The app sends a ticket from the backend, and the web side does not read it.
 - The badge check is in the phone only. See "A badge for an event".
 
 **What can be traced.**
 
-- One person has one name and one pass, and they link all that person's photos across events, by design.
+- By design, one person has one name and one pass, and they link all that person's photos across events. With test identities, this is not a real check of one human.
 - The pass is in a public text record, and names stay on a public chain.
 - **This is never safe for real protesters.** Anyone who learns who is behind one name can see all that person's photos.
 
-**Photos with no session.** The gallery shows them as unnamed and does not count them as people. The web side's own event page does not do this yet: there, each such photo counts as one person.
+**Photos with no session.** The gallery shows them as unnamed and does not count them as people.
 
 **What is only for this demo.**
 
@@ -286,10 +303,27 @@ Prize: [Cont] Best Use of IDKit.
 **What can go wrong when it runs.**
 
 - A lost or rotated bot key changes every user address, and the tree then reads as not set up.
+- A leak of the bot key gives every user key.
+- The bot can remove the root's owner from the registries, because it holds every role.
+- A session has no expiry, and nothing caps what the bot spends for one session.
+- A fresh upload can show "Forbidden" on Swarm's public gateway.
 - Rotating the World signing key voids every session and picture token.
 - World's mode is staging unless `WORLD_ENVIRONMENT` says otherwise. Set it on every deployment.
 - The bot's queue lives in one process.
 - Without an Arkiv access key, each write takes about 10 s more.
+
+## What the proof shows
+
+- The sealed picture follows from a signed original by the stated change.
+- Only the listed rectangles were edited. The rest comes from the signed original, re-encoded at lower quality.
+
+## What the proof does not show
+
+- **It is not a privacy guarantee.** The file still carries a map of the area, which can show outlines, even writing on plain paper, and the original's hash.
+- **It does not show that a camera took the photo.** In this demo our test key signs the photo after the app sends it. That key is not on any trust list.
+- **It does not cover the look on the screen.** The mask and the tiles are drawn by the app.
+- **The authorise page does not check the seal.** It checks only the hash's format, so anyone can type a made-up hash and authorise it.
+- **You cannot check it yourself.** The check is our server's word. The backend checks the proof, and the app shows the picture only if the check passed. The phone cannot recompute the hash, because it never holds the sealed file. The backend removes that file after the picture is fetched, or after 600 s if it is never fetched, and a service stop in that window can leave it until the next start. Once it is removed no one holds it, so the hash can no longer be checked against the file.
 
 ## What the app does
 
@@ -314,7 +348,7 @@ The page comes back through a `blankdemo://` link, and the app does not trust th
 
 ## Your name
 
-On the first Publish, and at any time from Settings, the app asks for a nickname. It sends what the person typed, and the web side alone decides if it can be a name. If not, the app shows one line: no spaces or dots, not a wallet address, or the name is taken. From then on the app uses the web side's own form of the name. Closing that step goes back to the button, and nothing is sent. The person proves in the World app that they are one human, and the web side checks that and makes an ENS name for them, in the background. The app keeps the name on the phone and shows that it is being created until the web side says it is done. If the World app cannot be opened from here, the app opens the web side's join page in a sheet, and believes the page's way back only when the web side then lists the name.
+On the first Publish, and at any time from Settings, the app asks for a nickname. It sends what the person typed, and the web side alone decides if it can be a name. If not, the app shows the web side's own words. From then on the app uses the web side's own form of the name. Closing that step goes back to the button, and nothing is sent. The person proves in the World app that they are one human, and the web side checks that and makes an ENS name for them, in the background. The app keeps the name on the phone and shows that it is being created until the web side says it is done. If the World app cannot be opened from here, the app opens the web side's join page in a sheet, and believes the page's way back only when the web side then lists the name.
 The registrar is our server, not a contract. The name goes on a public chain and stays there, and it links that person's photos across events.
 When the web side is making an ENS name for a picture, the result shows "name being created" under "Authorised", then the name. If it is still not done after about 90 s, the app asks once more with the same token.
 
@@ -364,7 +398,7 @@ npm install
 npm run dev
 ```
 
-Its settings are environment variables, read in `web/src/lib/`. No key is in this repo. The read-only link runs with `ARKIV_OWNER` set and no key.
+Its settings are environment variables, read in `web/src/lib/`. No key is in this repo. The read-only link runs with `ARKIV_OWNER` set and no key. It reads Arkiv. With no key, its `/tree` page shows no tree.
 
 ### The gallery page
 
@@ -393,16 +427,3 @@ Public Sans, under the SIL Open Font License. The licence is beside it in `app/F
 ## Licence
 
 The code is under MIT, see `LICENSE`. The font is under its own licence. The zkSeal logo and the mask image are not covered by MIT.
-
-## What the proof shows
-
-- The sealed picture follows from a signed original by the stated change.
-- Only the listed rectangles were edited. The rest comes from the signed original, re-encoded at lower quality.
-
-## What the proof does not show
-
-- **It is not a privacy guarantee.** The file still carries a map of the area, which can show outlines, even writing on plain paper, and the original's hash.
-- **It does not show that a camera took the photo.** In this demo our test key signs the photo after the app sends it. That key is not on any trust list.
-- **It does not cover the look on the screen.** The mask and the tiles are drawn by the app.
-- **The authorise page does not check the seal.** It checks only the hash's format, so anyone can type a made-up hash and authorise it.
-- **You cannot check it yourself.** The check is our server's word. The backend checks the proof, and the app shows the picture only if the check passed. The phone cannot recompute the hash, because it never holds the sealed file. The backend removes that file after the picture is fetched, or after 600 s if it is never fetched, and a service stop in that window can leave it until the next start. Once it is removed no one holds it, so the hash can no longer be checked against the file.
