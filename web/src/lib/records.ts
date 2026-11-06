@@ -67,7 +67,8 @@ export function keptImageName(value: unknown, hash: string): NameRecord | null {
   const v = value as Partial<NameRecord> | null;
   if (v?.hash !== hash || !isSealHash(hash) || !isEvent(v.event)) return null;
   const name = keptName(v.name);
-  if (name === null || typeof v.tx !== "string" || !/^0x[0-9a-f]{64}$/.test(v.tx)) return null;
+  // The transaction is "" when the name was on chain already and nothing had to be sent.
+  if (name === null || typeof v.tx !== "string" || !/^(0x[0-9a-f]{64})?$/.test(v.tx)) return null;
   if (typeof v.at !== "string" || Number.isNaN(Date.parse(v.at))) return null;
   return { hash, event: v.event, name, tx: v.tx, at: v.at };
 }

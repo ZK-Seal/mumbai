@@ -1,5 +1,5 @@
 import { records, type SealRecord } from "@/lib/records";
-import { imageTaken, registerImage, registerUser, TreeError, userTaken } from "@/lib/tree";
+import { registerImage, registerUser, TreeError, userTaken } from "@/lib/tree";
 
 /** Where a person's name stands on chain: asked for, or there. */
 export type EnsState = "pending" | "done";
@@ -49,7 +49,7 @@ const namingImages = new Set<string>();
 
 /**
  * Names the photo of one seal on chain: image<N> under its event, with N one more than the photo
- * names kept for that event so far. A number that is taken already is skipped, up to
+ * names kept for that event so far. A number that holds another seal already is skipped, up to
  * IMAGE_NAME_TRIES numbers. Once the name is there it is kept, so the seal is not named twice.
  * Only a seal at an event, authorised by a person with a user name, is named. Meant to run after
  * the answer is sent, and says in one log line how it went.
@@ -81,8 +81,9 @@ async function nameNow(record: SealRecord, event: string, ref: string): Promise<
   if (!user || kept) return;
   let n = (await store.namesByEvent(event)).length + 1;
   for (let tries = 0; tries < IMAGE_NAME_TRIES; tries++, n++) {
+    // A number already holding this seal (a name created before its record was kept) is kept;
+    // one holding another seal is "taken", and the next number is tried.
     const label = `image${n}`;
-    if (await imageTaken(event, label)) continue;
     let made;
     try {
       made = await registerImage(event, label, { hash: record.hash, by: user.name, ref });
