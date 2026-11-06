@@ -1,5 +1,5 @@
 import { after } from "next/server";
-import { createUserName, userEns } from "@/lib/naming";
+import { addressOf, createUserName, userEns } from "@/lib/naming";
 import { isLabel, records, type UserRecord } from "@/lib/records";
 import { treeRoot, userName, userTaken } from "@/lib/tree";
 import { boundNullifier, userSignal, worldAccepts, worldConfig } from "@/lib/world";
@@ -8,7 +8,13 @@ import { boundNullifier, userSignal, worldAccepts, worldConfig } from "@/lib/wor
 export const maxDuration = 60;
 
 function registered(user: UserRecord, ens: "pending" | "done") {
-  return Response.json({ state: "registered", name: user.name, pass: user.pass, ens });
+  return Response.json({
+    state: "registered",
+    name: user.name,
+    pass: user.pass,
+    address: addressOf(user),
+    ens,
+  });
 }
 
 function refused(reason: string, status: number) {
@@ -54,7 +60,8 @@ export async function POST(request: Request) {
   const at = new Date().toISOString();
   let kept: UserRecord;
   try {
-    kept = await records().putUser({ label, name: userName(label), pass: nullifier, at });
+    const address = addressOf({ address: null, pass: nullifier });
+    kept = await records().putUser({ label, name: userName(label), pass: nullifier, address, at });
   } catch {
     return refused("store", 503);
   }

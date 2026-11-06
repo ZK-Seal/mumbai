@@ -2,11 +2,11 @@ import { eventPhotos, isEvent } from "@/lib/records";
 
 /**
  * Says how many sealed photos were authorised at this event, and by how many people: one group
- * per pass, in the order each pass was first seen, under the person's user name (or null), with
- * each photo's hash, time, picture on Swarm (or null when none was kept), the person's name again,
- * and the photo's own name: `{name, state: "done"}`, `{state: "pending"}` while it is being
- * created, or null when it will not get one. The passes themselves are not given, as the pass
- * list does not give them.
+ * per pass, in the order each pass was first seen, under the person's user name and address (or
+ * null), with each photo's hash, time, picture on Swarm (or null when none was kept), the person's
+ * name again, and the photo's own name: `{name, state: "done"}`, `{state: "pending"}` while it is
+ * being created, or null when it will not get one. The passes themselves are not given, as the
+ * pass list does not give them.
  */
 export async function GET(_request: Request, { params }: { params: Promise<{ event: string }> }) {
   const { event } = await params;

@@ -1,4 +1,4 @@
-import { userEns } from "@/lib/naming";
+import { addressOf, userEns } from "@/lib/naming";
 import {
   imageState,
   isLabel,
@@ -13,7 +13,8 @@ const headers = { "cache-control": "no-store" };
 /**
  * Says whether a label is a person's name, whether that name is on chain yet, and which seals the
  * person authorised, newest first (at most PASS_LIST_LIMIT), each with its event, picture and the
- * photo's own name (as the seal answer gives it). The pass is not given.
+ * photo's own name (as the seal answer gives it), and the person's own address, which holds their
+ * names on chain. The pass is not given.
  */
 export async function GET(_request: Request, { params }: { params: Promise<{ label: string }> }) {
   const { label } = await params;
@@ -45,6 +46,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ lab
       state: "listed",
       label: user.label,
       name: user.name,
+      address: addressOf(user),
       ens: { state: await userEns(user.label) },
       images,
     },

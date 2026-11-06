@@ -7,12 +7,14 @@ import {
   type SealRecord,
   type UserRecord,
 } from "@/lib/records";
+import { addressOf } from "@/lib/naming";
 import { isSealHash } from "@/lib/world";
 
 /**
  * Says whether a person has authorised this seal, with which pass and which account, and at
  * which event, and where its picture is kept on Swarm, if one was kept. `name` is the person's
- * user name, or else the name a desk vouched for, or null. `image` is the photo's own name:
+ * user name, or else the name a desk vouched for, or null; `address` the user's own address, or
+ * null without a user name. `image` is the photo's own name:
  * `{name, state: "done"}`, `{state: "pending"}` while it is being created, or null.
  */
 export async function GET(_request: Request, { params }: { params: Promise<{ hash: string }> }) {
@@ -43,6 +45,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ has
     credential: record.credential,
     account: record.account,
     name: user?.name ?? record.name,
+    address: user ? addressOf(user) : null,
     event: record.event,
     at: record.at,
     picture: pictureLink(picture),

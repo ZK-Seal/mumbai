@@ -92,9 +92,21 @@ export function imageState(
 /**
  * A person with a name of their own: `label` is the part they chose, `name` the full name it
  * makes (<label>.users.<root>), and `pass` the pass of the World proof they gave for it. A name
- * is kept only for a person who gave a proof, and a person keeps one name.
+ * is kept only for a person who gave a proof, and a person keeps one name. `address` is the
+ * person's own address, which holds their names on chain; null for a user kept before it was.
  */
-export type UserRecord = { label: string; name: string; pass: string; at: string };
+export type UserRecord = {
+  label: string;
+  name: string;
+  pass: string;
+  address: string | null;
+  at: string;
+};
+
+/** An Ethereum address, 0x and 40 hex characters. */
+export function isAddress(value: unknown): value is string {
+  return typeof value === "string" && /^0x[0-9a-fA-F]{40}$/.test(value);
+}
 
 /** A label someone may choose: 3 to 20 lowercase letters, digits and dashes, not one of ours. */
 export function isLabel(value: unknown): value is string {
@@ -115,7 +127,8 @@ export function keptUser(value: unknown): UserRecord | null {
   const name = keptName(v.name);
   if (name === null || !name.startsWith(`${v.label}.`)) return null;
   if (typeof v.at !== "string" || Number.isNaN(Date.parse(v.at))) return null;
-  return { label: v.label, name, pass: v.pass, at: v.at };
+  const address = isAddress(v.address) ? v.address : null;
+  return { label: v.label, name, pass: v.pass, address, at: v.at };
 }
 
 /**
@@ -157,7 +170,7 @@ export type EventPhoto = PassSeal & {
 };
 
 /** One person's photos at an event, under their user name when they have one. */
-export type EventPhotos = { name: string | null; photos: EventPhoto[] };
+export type EventPhotos = { name: string | null; address: string | null; photos: EventPhoto[] };
 
 /**
  * The groups of an event, each under its person's user name or null, each photo with its
@@ -171,8 +184,9 @@ export function withPictures(
 ): EventPhotos[] {
   const byHash = new Map(pictures.map((picture) => [picture.hash, picture]));
   const named = new Map(names.map((name) => [name.hash, name]));
-  return groups.map(({ name, photos }) => ({
+  return groups.map(({ name, address, photos }) => ({
     name,
+    address,
     photos: photos.map((photo) => {
       const picture = byHash.get(photo.hash);
       return {
@@ -221,23 +235,32 @@ export function oldestFirst(seals: EventSeal[]): EventSeal[] {
 }
 
 /**
- * The seals of one person at an event, with their user name or null. The pass is left out, as
- * the pass list leaves it out.
+ * The seals of one person at an event, with their user name and address, or null. The pass is
+ * left out, as the pass list leaves it out.
  */
-export type EventGroup = { name: string | null; photos: PassSeal[] };
+export type EventGroup = { name: string | null; address: string | null; photos: PassSeal[] };
+
+/** What an event shows of a person with a user name. */
+export type GroupUser = { name: string; address: string | null };
 
 /**
  * One group per pass, in the order each pass was first seen; each group oldest first, under the
- * user name `names` gives for its pass.
+ * user name and address `users` gives for its pass.
  */
-export function byPerson(seals: EventSeal[], names: Map<string, string> = new Map()): EventGroup[] {
+export function byPerson(
+  seals: EventSeal[],
+  users: Map<string, GroupUser> = new Map(),
+): EventGroup[] {
   const groups = new Map<string, PassSeal[]>();
   for (const { hash, pass, at } of oldestFirst(seals)) {
     const photos = groups.get(pass) ?? [];
     photos.push({ hash, at });
     groups.set(pass, photos);
   }
-  return [...groups].map(([pass, photos]) => ({ name: names.get(pass) ?? null, photos }));
+  return [...groups].map(([pass, photos]) => {
+    const user = users.get(pass);
+    return { name: user?.name ?? null, address: user?.address ?? null, photos };
+  });
 }
 
 /**
@@ -255,11 +278,18 @@ export async function eventPhotos(event: string) {
   return { seals, groups: withPictures(event, byPerson(seals, users), pictures, names) };
 }
 
-/** The user name of each pass among these seals that has one. */
-export async function userNames(store: RecordStore, seals: EventSeal[]) {
+/** The user name and address of each pass among these seals that has a name. */
+export async function userNames(
+  store: RecordStore,
+  seals: EventSeal[],
+): Promise<Map<string, GroupUser>> {
   const passes = [...new Set(seals.map((seal) => seal.pass))];
   const users = await Promise.all(passes.map((pass) => store.userByPass(pass)));
-  return new Map(users.flatMap((user) => (user ? [[user.pass, user.name] as const] : [])));
+  return new Map(
+    users.flatMap((user) =>
+      user ? [[user.pass, { name: user.name, address: user.address }] as const] : [],
+    ),
+  );
 }
 
 /** A pass is a number, in decimal or 0x hex, short enough to be kept. */

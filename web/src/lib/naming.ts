@@ -1,5 +1,5 @@
-import { records, type SealRecord } from "@/lib/records";
-import { registerImage, registerUser, TreeError, userTaken } from "@/lib/tree";
+import { records, type SealRecord, type UserRecord } from "@/lib/records";
+import { registerImage, registerUser, TreeError, userAddress, userTaken } from "@/lib/tree";
 
 /** Where a person's name stands on chain: asked for, or there. */
 export type EnsState = "pending" | "done";
@@ -10,6 +10,19 @@ export async function userEns(label: string): Promise<EnsState> {
     return (await userTaken(label)) ? "done" : "pending";
   } catch {
     return "pending";
+  }
+}
+
+/**
+ * The person's own address: the one kept with them, or else the one their pass gives. Null when
+ * neither is known (a user kept before addresses were, on a server without the bot's key).
+ */
+export function addressOf(user: Pick<UserRecord, "address" | "pass">): string | null {
+  if (user.address) return user.address;
+  try {
+    return userAddress(user.pass);
+  } catch {
+    return null;
   }
 }
 

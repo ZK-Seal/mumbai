@@ -73,13 +73,15 @@ export const Pictures = defineSchema("blank-demo.pictures", {
 
 /**
  * One person's name on Arkiv. Looked up by the label and by the pass, and sorted by time, so those
- * are indexed; the full name is only read back.
+ * are indexed; the full name and the person's address are only read back. The address is left out
+ * of rows written before it was kept.
  */
 export const Users = defineSchema("blank-demo.users", {
   label: str().indexed(),
   pass: str().indexed(),
   at: u64().indexed(),
   name: str(),
+  address: str().optional(),
 });
 
 /**
@@ -283,9 +285,17 @@ type UserRow = Provenance & {
   pass: { value: string };
   at: { value: bigint };
   name: { value: string };
+  address?: { value: string };
 };
 
-const USER_COLUMNS = { ...PROVENANCE, label: true, pass: true, at: true, name: true } as const;
+const USER_COLUMNS = {
+  ...PROVENANCE,
+  label: true,
+  pass: true,
+  at: true,
+  name: true,
+  address: true,
+} as const;
 
 function toUser(row: UserRow): UserRecord | null {
   const ms = Number(row.at.value);
@@ -294,6 +304,7 @@ function toUser(row: UserRow): UserRecord | null {
     label: row.label.value,
     pass: row.pass.value,
     name: row.name.value,
+    address: row.address?.value ?? null,
     at: new Date(ms).toISOString(),
   });
 }
@@ -715,8 +726,16 @@ export class ArkivStore implements RecordStore {
     const fresh = keptUser(user);
     const ms = fresh ? Date.parse(fresh.at) : NaN;
     if (!fresh || !Number.isSafeInteger(ms) || ms < 0) throw new Error("not a user");
-    if (![fresh.label, fresh.pass, fresh.name].every(fitsStr)) throw new Error("not a user");
-    const values = { label: fresh.label, pass: fresh.pass, at: u64(ms), name: fresh.name };
+    if (![fresh.label, fresh.pass, fresh.name, fresh.address ?? ""].every(fitsStr)) {
+      throw new Error("not a user");
+    }
+    const values = {
+      label: fresh.label,
+      pass: fresh.pass,
+      at: u64(ms),
+      name: fresh.name,
+      ...(fresh.address ? { address: fresh.address } : {}),
+    };
     // Whatever holds the label, or else the pass, is what is kept: ours once it has landed.
     const find = async () => {
       const users = await this.holding();
