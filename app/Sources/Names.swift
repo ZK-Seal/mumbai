@@ -25,14 +25,14 @@ enum Names {
     /// The root name on the Publish button. Change it here only. The names themselves always come from the web side.
     static let root = "zk-seal.eth"
 
-    /// 3 to 20 lowercase letters, digits and hyphens, with no hyphen first.
+    /// One part of a name as the web side gave it, safe to put in a path. This is no rule on what a person may choose: the web side alone decides that.
     static func isLabel(_ text: String) -> Bool {
-        text.range(of: #"^[a-z0-9][a-z0-9-]{2,19}\z"#, options: .regularExpression) != nil
+        text.utf8.count <= 63 && text.range(of: #"^[^\s\p{Cc}./?#\\]+\z"#, options: .regularExpression) != nil
     }
 
-    /// The form of a full ENS name, so that nothing else reaches the screen.
+    /// The form of a full ENS name, so that nothing else reaches the screen. A part may hold any letter or emoji the web side gave.
     static func isName(_ text: String) -> Bool {
-        text.count <= 128 && text.range(of: #"^[a-z0-9-]+(\.[a-z0-9-]+)+\z"#, options: .regularExpression) != nil
+        text.utf8.count <= 128 && text.range(of: #"^[^\s\p{Cc}./?#\\]+(\.[^\s\p{Cc}./?#\\]+)+\z"#, options: .regularExpression) != nil
     }
 
     /// The web side's session for a person: their pass, a dot, and 64 hex digits. This fixed form needs no escaping.
@@ -43,6 +43,11 @@ enum Names {
     /// The first part of a full name.
     static func label(of name: String) -> String? {
         name.split(separator: ".").first.map(String.init).flatMap { isLabel($0) ? $0 : nil }
+    }
+
+    /// The label the web side gave. A name saved before the app kept it gives its first part.
+    static func savedLabel(_ saved: String, name: String) -> String? {
+        saved.isEmpty ? label(of: name) : saved
     }
 
     /// The name the web side lists, and its state now. Nil if the web side has no answer or does not list it.
@@ -102,7 +107,7 @@ enum Names {
     /// One plain line for each refusal. Nothing the web side says is shown as written.
     static func sentence(forRefusal word: String) -> String {
         switch word {
-        case "label": return "Use 3 to 20 lowercase letters, digits or hyphens, with no hyphen first."
+        case "label": return "Use a name without spaces or dots, not a wallet address"
         case "taken": return "This name is taken. Try another."
         case "not-set-up": return "Names are not set up yet."
         case "store": return "The list of names cannot be read now. Try again."

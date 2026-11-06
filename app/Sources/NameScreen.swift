@@ -7,6 +7,7 @@ struct NameScreen: View {
 
     @AppStorage("webAddress") private var webAddress = ""
     @AppStorage("userName") private var userName = ""
+    @AppStorage("userLabel") private var userLabel = ""
     @AppStorage("userNameState") private var userNameState = ""
     @AppStorage("userSession") private var userSession = ""
     @State private var label = ""
@@ -72,17 +73,13 @@ struct NameScreen: View {
     }
 
     private func start() {
-        let wanted = label.trimmingCharacters(in: .whitespaces)
-        guard Names.isLabel(wanted) else {
-            line = Names.sentence(forRefusal: "label")
-            return
-        }
+        let typed = label
         line = nil
         working = true
         let base = AuthoriseLink.base(fromSettings: webAddress)
         Task {
-            switch await world.join(base: base, label: wanted) {
-            case .registered(let name, let state, let session):
+            switch await world.join(base: base, typed: typed) {
+            case .registered(let name, let saved, let state, let session):
                 // If this person already has a name, this is that name.
                 if let session {
                     userSession = session
@@ -90,6 +87,7 @@ struct NameScreen: View {
                     userSession = ""
                 }
                 userNameState = state
+                userLabel = saved
                 userName = name
                 label = ""
                 onClose?()
@@ -100,7 +98,7 @@ struct NameScreen: View {
             case .unavailable:
                 line = "Names are not available now."
             case .useSheet:
-                await joinInSheet(base: base, label: wanted)
+                await joinInSheet(base: base, label: typed)
             }
             working = false
         }
@@ -123,6 +121,7 @@ struct NameScreen: View {
             userSession = ""
         }
         userNameState = found.state
+        userLabel = joined
         userName = found.name
         label = ""
         onClose?()
@@ -130,7 +129,7 @@ struct NameScreen: View {
 
     /// Asks until the name is finished. It takes a while on the chain, so this goes on only while the screen is open.
     private func watchName() async {
-        guard userNameState == "pending", let label = Names.label(of: userName) else { return }
+        guard userNameState == "pending", let label = Names.savedLabel(userLabel, name: userName) else { return }
         if let state = await Names.waitForName(base: AuthoriseLink.base(fromSettings: webAddress), label: label) {
             userNameState = state
         }

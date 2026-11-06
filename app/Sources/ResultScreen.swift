@@ -36,6 +36,7 @@ struct ResultScreen: View {
     @AppStorage("cover") private var cover = Cover.mask
     @AppStorage("event") private var event = ""
     @AppStorage("userName") private var userName = ""
+    @AppStorage("userLabel") private var userLabel = ""
     @AppStorage("userNameState") private var userNameState = ""
     @AppStorage("userSession") private var userSession = ""
     /// The SHA-256 of the badge scanned for one event. The code itself is never kept.
@@ -278,7 +279,7 @@ struct ResultScreen: View {
 
     /// The web side finishes a waiting name when it is asked, so this asks while the screen is open.
     private func watchUserName() async {
-        guard userNameState == "pending", let label = Names.label(of: userName) else { return }
+        guard userNameState == "pending", let label = Names.savedLabel(userLabel, name: userName) else { return }
         if let state = await Names.waitForName(base: AuthoriseLink.base(fromSettings: webAddress), label: label) {
             userNameState = state
         }

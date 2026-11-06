@@ -18,7 +18,7 @@ final class WorldStep {
     }
 
     enum JoinOutcome {
-        case registered(name: String, state: String, session: String?)
+        case registered(name: String, label: String, state: String, session: String?)
         /// The web side's own word for why not.
         case refused(String)
         /// World's own error word, from its fixed list.
@@ -47,6 +47,7 @@ final class WorldStep {
         }
         var state: String
         var reason: String?
+        var label: String?
         var app_id: String?
         var action: String?
         var environment: String?
@@ -84,6 +85,7 @@ final class WorldStep {
     private struct Joined: Decodable {
         var state: String
         var reason: String?
+        var label: String?
         var name: String?
         var ens: NameState?
         var session: String?
@@ -115,16 +117,19 @@ final class WorldStep {
         return await AuthoriseLink.hasRecord(base: base, hash: hash) ? .authorised(pictureToken: nil, image: nil) : .notAuthorised
     }
 
-    /// One person's name: the same World step, with the signal the web side gives. The label has a fixed form, so it needs no escaping.
-    func join(base: String, label: String) async -> JoinOutcome {
-        guard let start: Start = await post(base, "/api/user/request", "{\"label\":\"\(label)\"}", limit: 15) else { return .unavailable }
+    /// One person's name: the same World step, with the signal the web side gives. What was typed goes as it is, and the web side alone decides if it can be a name.
+    /// From its first answer on, only the web side's own form of the name is used.
+    func join(base: String, typed: String) async -> JoinOutcome {
+        guard let sent = Self.jsonText(typed),
+              let start: Start = await post(base, "/api/user/request", "{\"label\":\(sent)}", limit: 15) else { return .unavailable }
         switch start.state {
         case "ready": break
         case "taken": return .refused("taken")
         case "refused": return .refused(start.reason ?? "")
         default: return .unavailable
         }
-        guard let signal = start.signal, !signal.isEmpty else { return .unavailable }
+        let label = start.label ?? typed
+        guard let signal = start.signal, !signal.isEmpty, Names.isLabel(label), let settled = Self.jsonText(label) else { return .unavailable }
         let json: String
         switch await prove(start, signal: signal) {
         case .json(let made): json = made
@@ -132,12 +137,19 @@ final class WorldStep {
         case .cannotStart: return .useSheet
         case .unreadable: return .unavailable
         }
-        let answer: Joined? = await post(base, "/api/user/register", "{\"label\":\"\(label)\",\"result\":\(json)}", limit: 60)
+        let answer: Joined? = await post(base, "/api/user/register", "{\"label\":\(settled),\"result\":\(json)}", limit: 60)
         guard let answer else { return .unavailable }
         if answer.state == "registered", let name = answer.name, Names.isName(name) {
-            return .registered(name: name, state: answer.ens?.state ?? "pending", session: answer.session.flatMap { Names.isSession($0) ? $0 : nil })
+            // If this person already has a name, the answer's own name is the one to keep.
+            let saved = answer.label.flatMap { Names.isLabel($0) ? $0 : nil } ?? Names.label(of: name) ?? label
+            return .registered(name: name, label: saved, state: answer.ens?.state ?? "pending", session: answer.session.flatMap { Names.isSession($0) ? $0 : nil })
         }
         return .refused(answer.state == "taken" ? "taken" : answer.reason ?? "")
+    }
+
+    /// Text a person typed, as a JSON string.
+    private static func jsonText(_ text: String) -> String? {
+        (try? JSONEncoder().encode(text)).flatMap { String(data: $0, encoding: .utf8) }
     }
 
     /// One proof from the World app, as the web side's answer asks for it. The result comes back as the package wrote it.
