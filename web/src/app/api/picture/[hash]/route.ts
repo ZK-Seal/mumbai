@@ -18,7 +18,8 @@ export const maxDuration = 300;
 
 const headers = { "cache-control": "no-store" };
 
-function refused(reason: string, status: number) {
+function refused(reason: string, status: number, hash: string) {
+  console.log(`picture: refused ${reason} hash=${hash.slice(0, 8)}`);
   return Response.json({ state: "refused", reason }, { status, headers });
 }
 
@@ -88,11 +89,11 @@ async function readAtMost(request: Request, limit: number): Promise<Uint8Array |
  */
 export async function POST(request: Request, { params }: { params: Promise<{ hash: string }> }) {
   const { hash } = await params;
-  if (!isSealHash(hash)) return refused("hash", 400);
+  if (!isSealHash(hash)) return refused("hash", 400, hash);
   const config = worldConfig();
-  if (!config) return refused("not-set-up", 503);
+  if (!config) return refused("not-set-up", 503, hash);
   if (!pictureTokenMatches(config, hash, request.headers.get("x-picture-token"))) {
-    return refused("token", 403);
+    return refused("token", 403, hash);
   }
   let record: SealRecord | null;
   let kept: PictureRecord | null;
@@ -100,9 +101,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ has
     record = await records().get(hash);
     kept = record ? await records().getPicture(hash) : null;
   } catch {
-    return refused("store", 503);
+    return refused("store", 503, hash);
   }
-  if (!record) return refused("unknown", 404);
+  if (!record) return refused("unknown", 404, hash);
   if (kept) {
     // A picture whose photo has no name yet is named again, in case the first try failed.
     await nameLater(record, kept);
@@ -110,19 +111,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ has
   }
 
   const type = (request.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
-  if (type !== "image/jpeg") return refused("not-jpeg", 415);
+  if (type !== "image/jpeg") return refused("not-jpeg", 415, hash);
   const declared = Number(request.headers.get("content-length") ?? "0");
-  if (declared > PICTURE_MAX_BYTES) return refused("too-large", 413);
+  if (declared > PICTURE_MAX_BYTES) return refused("too-large", 413, hash);
   const bytes = await readAtMost(request, PICTURE_MAX_BYTES);
-  if (bytes === null) return refused("too-large", 413);
-  if (bytes.length < PICTURE_MIN_BYTES) return refused("too-small", 400);
-  if (!isJpeg(bytes)) return refused("not-jpeg", 415);
+  if (bytes === null) return refused("too-large", 413, hash);
+  if (bytes.length < PICTURE_MIN_BYTES) return refused("too-small", 400, hash);
+  if (!isJpeg(bytes)) return refused("not-jpeg", 415, hash);
 
   let ref: string;
   try {
     ref = await uploadPicture(bytes, `${hash.slice(0, 16)}.jpg`);
   } catch {
-    return refused("storage", 503);
+    return refused("storage", 503, hash);
   }
   let picture: PictureRecord;
   try {
@@ -135,8 +136,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ has
       at: new Date().toISOString(),
     });
   } catch {
-    return refused("store", 503);
+    return refused("store", 503, hash);
   }
+  console.log(`picture: stored hash=${hash.slice(0, 8)} ref=${ref.slice(0, 16)}`);
   await nameLater(record, picture);
   return stored(picture);
 }

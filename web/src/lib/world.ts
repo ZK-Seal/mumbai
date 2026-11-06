@@ -73,6 +73,17 @@ export function sealSignal(signal: string): string {
   return hashSignal(signal).toLowerCase();
 }
 
+/** A value for a log line, cut to 20 characters. */
+function clip(value: unknown): string {
+  const text = typeof value === "string" ? value : (JSON.stringify(value) ?? String(value));
+  return text.length > 20 ? `${text.slice(0, 20)}...` : text;
+}
+
+function unbound(why: string): null {
+  console.log(`world: not bound: ${why}`);
+  return null;
+}
+
 type ResponseItem = { identifier?: unknown; signal_hash?: unknown; nullifier?: unknown };
 
 /**
@@ -87,16 +98,29 @@ export function boundNullifier(
   config: WorldConfig,
   action: string,
 ): string | null {
-  if ((result as { action?: unknown })?.action !== action) return null;
+  const given = (result as { action?: unknown })?.action;
+  if (given !== action) return unbound(`action mismatch ${clip(given)} wanted ${action}`);
   const responses = (result as { responses?: unknown })?.responses;
-  if (!Array.isArray(responses) || responses.length !== 1) return null;
+  if (!Array.isArray(responses) || responses.length !== 1) {
+    const count = Array.isArray(responses) ? responses.length : clip(responses);
+    return unbound(`responses count ${count}`);
+  }
   const item = responses[0] as ResponseItem;
-  if (typeof item.signal_hash !== "string" || typeof item.nullifier !== "string") return null;
-  if (item.signal_hash.toLowerCase() !== sealSignal(signal)) return null;
+  if (typeof item.signal_hash !== "string") return unbound(`signal ${clip(item.signal_hash)}`);
+  if (typeof item.nullifier !== "string") return unbound(`nullifier ${clip(item.nullifier)}`);
+  if (item.signal_hash.toLowerCase() !== sealSignal(signal)) {
+    const want = clip(sealSignal(signal));
+    return unbound(`signal mismatch ${clip(item.signal_hash)} wanted ${want}`);
+  }
   const wanted = config.credential === "selfie" ? ["selfie"] : ["proof_of_human", "orb"];
-  if (typeof item.identifier !== "string" || !wanted.includes(item.identifier)) return null;
+  if (typeof item.identifier !== "string" || !wanted.includes(item.identifier)) {
+    return unbound(`identifier ${clip(item.identifier)} wanted ${wanted.join("|")}`);
+  }
   return item.nullifier;
 }
+
+/** What World says when it refuses, as far as it says anything. */
+type WorldError = { code?: unknown; detail?: unknown; message?: unknown };
 
 /**
  * Asks World whether the proof is good. True only for a clear yes in the environment we expect,
@@ -109,7 +133,13 @@ export async function worldAccepts(
   config: WorldConfig,
   action: string,
 ): Promise<boolean> {
-  if ((result as { environment?: unknown })?.environment !== config.environment) return false;
+  const given = (result as { environment?: unknown })?.environment;
+  if (given !== config.environment) {
+    const want = config.environment;
+    console.log(`world: not bound: environment mismatch ${clip(given)} wanted ${want}`);
+    return false;
+  }
+  const where = `action=${action} env=${config.environment}`;
   let response: Response;
   try {
     response = await fetch(`https://developer.world.org/api/v4/verify/${config.rpId}`, {
@@ -118,15 +148,31 @@ export async function worldAccepts(
       body: JSON.stringify(result),
       signal: AbortSignal.timeout(15000),
     });
-  } catch {
+  } catch (error) {
+    console.log(`world: verify unreachable ${clip((error as Error)?.name ?? error)} ${where}`);
     return false;
   }
-  if (!response.ok) return false;
   const answer = (await response.json().catch(() => null)) as
-    | { success?: unknown; environment?: unknown; action?: unknown }
+    | ({ success?: unknown; environment?: unknown; action?: unknown } & WorldError)
     | null;
-  if (answer?.action !== undefined && answer.action !== action) return false;
-  return answer?.success === true && answer.environment === config.environment;
+  /** One line with World's own code and message, if it gave any, else what we found wrong. */
+  const refuse = (why: string) => {
+    const said = [answer?.code, answer?.detail ?? answer?.message]
+      .filter((part) => part !== undefined && part !== null)
+      .map((part) => (typeof part === "string" ? part : JSON.stringify(part)).slice(0, 120))
+      .join(" ");
+    console.log(`world: verify refused ${response.status} ${said || why} ${where}`);
+    return false;
+  };
+  if (!response.ok) return refuse("not-ok");
+  if (answer?.action !== undefined && answer.action !== action) {
+    return refuse(`action ${clip(answer.action)}`);
+  }
+  if (answer?.success !== true) return refuse("success=false");
+  if (answer.environment !== config.environment) {
+    return refuse(`environment ${clip(answer.environment)}`);
+  }
+  return true;
 }
 
 /**

@@ -18,7 +18,9 @@ function registered(user: UserRecord, ens: "pending" | "done") {
   });
 }
 
-function refused(reason: string, status: number) {
+function refused(reason: string, status: number, label: unknown) {
+  const labelText = typeof label === "string" ? label.slice(0, 32) : "-";
+  console.log(`user/register: refused ${reason} label=${labelText}`);
   return Response.json({ state: "refused", reason }, { status });
 }
 
@@ -34,14 +36,14 @@ export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as
     | { label?: unknown; result?: unknown }
     | null;
-  if (!isLabel(body?.label)) return refused("label", 400);
+  if (!isLabel(body?.label)) return refused("label", 400, body?.label);
   const label = body.label;
   const config = worldConfig();
-  if (!config || !treeRoot()) return refused("not-set-up", 503);
+  if (!config || !treeRoot()) return refused("not-set-up", 503, label);
   const nullifier = boundNullifier(body.result, userSignal(label), config, config.action);
-  if (nullifier === null) return refused("not-this-name", 422);
+  if (nullifier === null) return refused("not-this-name", 422, label);
   if (!(await worldAccepts(body.result, config, config.action))) {
-    return refused("not-verified", 422);
+    return refused("not-verified", 422, label);
   }
   let mine: UserRecord | null;
   let held: UserRecord | null;
@@ -49,7 +51,7 @@ export async function POST(request: Request) {
     mine = await records().userByPass(nullifier);
     held = mine ? null : await records().userByLabel(label);
   } catch {
-    return refused("store", 503);
+    return refused("store", 503, label);
   }
   if (mine) {
     const ens = await userEns(mine.label);
@@ -57,19 +59,20 @@ export async function POST(request: Request) {
     if (ens === "pending") after(() => createUserName(mine.label, mine.pass));
     return registered(mine, ens);
   }
-  if (held || (await userTaken(label).catch(() => false))) return refused("taken", 409);
+  if (held || (await userTaken(label).catch(() => false))) return refused("taken", 409, label);
   const at = new Date().toISOString();
   let kept: UserRecord;
   try {
     const address = addressOf({ address: null, pass: nullifier });
     kept = await records().putUser({ label, name: userName(label), pass: nullifier, address, at });
   } catch {
-    return refused("store", 503);
+    return refused("store", 503, label);
   }
   // Another request may have kept this label, or another name for this pass, first.
-  if (kept.pass !== nullifier) return refused("taken", 409);
+  if (kept.pass !== nullifier) return refused("taken", 409, label);
   if (kept.label === label && kept.at === at) {
     after(() => createUserName(label, nullifier));
+    console.log(`user/register: registered label=${label}`);
     return registered(kept, "pending");
   }
   return registered(kept, await userEns(kept.label));

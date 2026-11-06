@@ -1,6 +1,12 @@
 import { isEvent, records, type SealRecord } from "@/lib/records";
 import { actionFor, isSealHash, requestContext, worldConfig } from "@/lib/world";
 
+function refused(reason: string, status: number, hash: unknown) {
+  const hashText = typeof hash === "string" ? hash.slice(0, 8) : "-";
+  console.log(`world/request: refused ${reason} hash=${hashText}`);
+  return Response.json({ state: "refused", reason }, { status });
+}
+
 /**
  * Starts one authorisation: hands the page what the World app needs for this seal. A seal that
  * is already authorised gets its record back instead.
@@ -10,16 +16,16 @@ export async function POST(request: Request) {
     | { hash?: unknown; event?: unknown }
     | null;
   if (!isSealHash(body?.hash)) {
-    return Response.json({ state: "refused", reason: "hash" }, { status: 400 });
+    return refused("hash", 400, body?.hash);
   }
   if (body.event !== undefined && !isEvent(body.event)) {
-    return Response.json({ state: "refused", reason: "event" }, { status: 400 });
+    return refused("event", 400, body?.hash);
   }
   let kept: SealRecord | null;
   try {
     kept = await records().get(body.hash);
   } catch {
-    return Response.json({ state: "refused", reason: "store" }, { status: 503 });
+    return refused("store", 503, body?.hash);
   }
   if (kept) {
     return Response.json({
@@ -34,7 +40,7 @@ export async function POST(request: Request) {
   }
   const config = worldConfig();
   if (!config) {
-    return Response.json({ state: "refused", reason: "not-set-up" }, { status: 503 });
+    return refused("not-set-up", 503, body?.hash);
   }
   const action = actionFor(config, isEvent(body.event) ? body.event : null);
   return Response.json({

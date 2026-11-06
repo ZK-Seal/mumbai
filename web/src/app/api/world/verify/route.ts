@@ -29,8 +29,14 @@ function verified(record: SealRecord, asked: Vouch | null = null, token: string 
 }
 
 /** The record of seals could not be read or written; nothing is said about this seal. */
-function storeFailed() {
-  return Response.json({ state: "refused", reason: "store" }, { status: 503 });
+function storeFailed(hash: string) {
+  return refused("store", 503, hash);
+}
+
+function refused(reason: string, status: number, hash: unknown) {
+  const hashText = typeof hash === "string" ? hash.slice(0, 8) : "-";
+  console.log(`world/verify: refused ${reason} hash=${hashText}`);
+  return Response.json({ state: "refused", reason }, { status });
 }
 
 /**
@@ -54,30 +60,30 @@ export async function POST(request: Request) {
     | { hash?: unknown; result?: unknown; name?: unknown; event?: unknown }
     | null;
   if (!isSealHash(body?.hash)) {
-    return Response.json({ state: "refused", reason: "hash" }, { status: 400 });
+    return refused("hash", 400, body?.hash);
   }
   if (body.event !== undefined && !isEvent(body.event)) {
-    return Response.json({ state: "refused", reason: "event" }, { status: 400 });
+    return refused("event", 400, body?.hash);
   }
   const event = isEvent(body.event) ? body.event : null;
   const config = worldConfig();
   if (!config) {
-    return Response.json({ state: "refused", reason: "not-set-up" }, { status: 503 });
+    return refused("not-set-up", 503, body?.hash);
   }
   let kept: SealRecord | null;
   try {
     kept = await records().get(body.hash);
   } catch {
-    return storeFailed();
+    return storeFailed(body.hash);
   }
   if (kept) return verified(kept);
   const action = actionFor(config, event);
   const nullifier = boundNullifier(body.result, body.hash, config, action);
   if (nullifier === null) {
-    return Response.json({ state: "refused", reason: "not-this-seal" }, { status: 422 });
+    return refused("not-this-seal", 422, body?.hash);
   }
   if (!(await worldAccepts(body.result, config, action))) {
-    return Response.json({ state: "refused", reason: "not-verified" }, { status: 422 });
+    return refused("not-verified", 422, body?.hash);
   }
   let name: string | null = null;
   let asked: Vouch | null = null;
@@ -92,7 +98,7 @@ export async function POST(request: Request) {
     try {
       name = (await records().userByPass(nullifier))?.name ?? null;
     } catch {
-      return storeFailed();
+      return storeFailed(body.hash);
     }
   }
   const at = new Date().toISOString();
@@ -108,9 +114,11 @@ export async function POST(request: Request) {
       at,
     });
   } catch {
-    return storeFailed();
+    return storeFailed(body.hash);
   }
   // Another request may have kept a record for this seal first; then this call made nothing new.
   const created = record.pass === nullifier && record.at === at;
+  const pass = record.pass.slice(0, 10);
+  console.log(`world/verify: verified hash=${body.hash.slice(0, 8)} pass=${pass}`);
   return verified(record, asked, created ? pictureToken(config, body.hash) : null);
 }
