@@ -1,3 +1,4 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { signRequest } from "@worldcoin/idkit/signing";
 import { hashSignal } from "@worldcoin/idkit/hashing";
 
@@ -116,4 +117,21 @@ export async function worldAccepts(
     | null;
   if (answer?.action !== undefined && answer.action !== action) return false;
   return answer?.success === true && answer.environment === config.environment;
+}
+
+/**
+ * The token that lets a client upload the picture of one seal: HMAC-SHA256 over "picture:" and
+ * the hash, as hex. Its key is drawn from the signing key under a fixed label, so the signing key
+ * itself never leaves the server and no other secret is needed. Only the answer that keeps a new
+ * record carries it, so only the client that just authorised the seal holds it.
+ */
+export function pictureToken(config: WorldConfig, hash: string): string {
+  const key = createHmac("sha256", config.signingKey).update("picture-token-key").digest();
+  return createHmac("sha256", key).update(`picture:${hash}`).digest("hex");
+}
+
+/** Whether a token given with an upload is the one for this seal, compared in constant time. */
+export function pictureTokenMatches(config: WorldConfig, hash: string, given: string | null) {
+  if (given === null || !/^[0-9a-f]{64}$/.test(given)) return false;
+  return timingSafeEqual(Buffer.from(pictureToken(config, hash), "hex"), Buffer.from(given, "hex"));
 }

@@ -1,9 +1,19 @@
 import { deskName, deskOf, ethClient, vouch, type Vouch } from "@/lib/ens";
 import { isEvent, records, type SealRecord } from "@/lib/records";
-import { actionFor, boundNullifier, isSealHash, worldAccepts, worldConfig } from "@/lib/world";
+import {
+  actionFor,
+  boundNullifier,
+  isSealHash,
+  pictureToken,
+  worldAccepts,
+  worldConfig,
+} from "@/lib/world";
 
-/** `vouch` says what the desk answered about a name given with this authorisation, if any. */
-function verified(record: SealRecord, asked: Vouch | null = null) {
+/**
+ * `vouch` says what the desk answered about a name given with this authorisation, if any.
+ * `token` is the picture upload token, given only when this very call kept a new record.
+ */
+function verified(record: SealRecord, asked: Vouch | null = null, token: string | null = null) {
   return Response.json({
     state: "verified",
     pass: record.pass,
@@ -14,6 +24,7 @@ function verified(record: SealRecord, asked: Vouch | null = null) {
     vouch: asked,
     event: record.event,
     at: record.at,
+    ...(token ? { picture_token: token } : {}),
   });
 }
 
@@ -32,6 +43,10 @@ function storeFailed() {
  * desk vouches for it, as the chain says now: it is a member of the desk, and it carries this
  * authorisation's pass. A name the desk does not vouch for is dropped;
  * the authorisation itself still stands.
+ *
+ * The answer that keeps a new record also carries `picture_token`, which lets this client upload
+ * the seal's picture. An answer with a record kept before never carries it: anyone can reach that
+ * answer by posting anything for a known hash.
  */
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as
@@ -73,6 +88,7 @@ export async function POST(request: Request) {
     asked = answer.vouch;
     name = answer.name;
   }
+  const at = new Date().toISOString();
   let record: SealRecord;
   try {
     record = await records().put({
@@ -82,10 +98,12 @@ export async function POST(request: Request) {
       account: null,
       name,
       event,
-      at: new Date().toISOString(),
+      at,
     });
   } catch {
     return storeFailed();
   }
-  return verified(record, asked);
+  // Another request may have kept a record for this seal first; then this call made nothing new.
+  const created = record.pass === nullifier && record.at === at;
+  return verified(record, asked, created ? pictureToken(config, body.hash) : null);
 }
