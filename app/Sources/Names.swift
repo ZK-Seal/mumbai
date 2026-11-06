@@ -32,6 +32,11 @@ enum Names {
         text.count <= 128 && text.range(of: #"^[a-z0-9-]+(\.[a-z0-9-]+)+\z"#, options: .regularExpression) != nil
     }
 
+    /// The web side's session for a person: their pass, a dot, and 64 hex digits. This fixed form needs no escaping.
+    static func isSession(_ text: String) -> Bool {
+        text.range(of: #"^[0-9A-Za-z]{1,128}\.[0-9a-fA-F]{64}\z"#, options: .regularExpression) != nil
+    }
+
     /// The first part of a full name.
     static func label(of name: String) -> String? {
         name.split(separator: ".").first.map(String.init).flatMap { isLabel($0) ? $0 : nil }

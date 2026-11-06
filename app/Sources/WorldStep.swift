@@ -16,7 +16,7 @@ final class WorldStep {
     }
 
     enum JoinOutcome {
-        case registered(name: String, state: String)
+        case registered(name: String, state: String, session: String?)
         /// The web side's own word for why not.
         case refused(String)
         /// World's own error word, from its fixed list.
@@ -82,11 +82,13 @@ final class WorldStep {
         var reason: String?
         var name: String?
         var ens: NameState?
+        var session: String?
     }
 
     private var polling: Task<IDKitCompletionResult, Never>?
 
-    func run(base: String, hash: String, event: String?) async -> Outcome {
+    /// With the person's session, the web side files this photo under their name. Without one, the photo stays unnamed.
+    func run(base: String, hash: String, event: String?, session: String?) async -> Outcome {
         guard let start: Start = await post(base, "/api/world/request", body(hash: hash, event: event), limit: 15) else { return .useSheet }
         // This answer carries the seal's record itself.
         if start.state == "authorised" { return .authorised(pictureToken: nil, image: nil) }
@@ -98,7 +100,7 @@ final class WorldStep {
         case .cannotStart: return .useSheet
         case .unreadable: return .notAuthorised
         }
-        let finish: Finish? = await post(base, "/api/world/verify", body(hash: hash, event: event, result: json), limit: 60)
+        let finish: Finish? = await post(base, "/api/world/verify", body(hash: hash, event: event, result: json, session: session), limit: 60)
         // This answer is trusted as it is. A second call could miss a fresh record.
         if let finish { return finish.state == "verified" ? .authorised(pictureToken: finish.token, image: Names.valid(finish.image)) : .notAuthorised }
         // With no answer at all, the record may still have been kept.
@@ -125,7 +127,7 @@ final class WorldStep {
         let answer: Joined? = await post(base, "/api/user/register", "{\"label\":\"\(label)\",\"result\":\(json)}", limit: 60)
         guard let answer else { return .unavailable }
         if answer.state == "registered", let name = answer.name, Names.isName(name) {
-            return .registered(name: name, state: answer.ens?.state ?? "pending")
+            return .registered(name: name, state: answer.ens?.state ?? "pending", session: answer.session.flatMap { Names.isSession($0) ? $0 : nil })
         }
         return .refused(answer.state == "taken" ? "taken" : answer.reason ?? "")
     }
@@ -176,10 +178,11 @@ final class WorldStep {
     }
 
     /// The hash and event have a fixed form, so they need no escaping. The result stays exactly as the package wrote it.
-    private func body(hash: String, event: String?, result: String? = nil) -> String {
+    private func body(hash: String, event: String?, result: String? = nil, session: String? = nil) -> String {
         var parts = ["\"hash\":\"\(hash)\""]
         if let event { parts.append("\"event\":\"\(event)\"") }
         if let result { parts.append("\"result\":\(result)") }
+        if let session { parts.append("\"session\":\"\(session)\"") }
         return "{" + parts.joined(separator: ",") + "}"
     }
 

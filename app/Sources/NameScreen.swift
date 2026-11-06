@@ -8,6 +8,7 @@ struct NameScreen: View {
     @AppStorage("webAddress") private var webAddress = ""
     @AppStorage("userName") private var userName = ""
     @AppStorage("userNameState") private var userNameState = ""
+    @AppStorage("userSession") private var userSession = ""
     @State private var label = ""
     @State private var working = false
     @State private var line: String?
@@ -84,8 +85,13 @@ struct NameScreen: View {
         let base = AuthoriseLink.base(fromSettings: webAddress)
         Task {
             switch await world.join(base: base, label: wanted) {
-            case .registered(let name, let state):
+            case .registered(let name, let state, let session):
                 // If this person already has a name, this is that name.
+                if let session {
+                    userSession = session
+                } else if name != userName {
+                    userSession = ""
+                }
                 userNameState = state
                 userName = name
                 label = ""
@@ -113,6 +119,7 @@ struct NameScreen: View {
             line = Names.sentence(forRefusal: "")
             return
         }
+        if found.name != userName { userSession = "" }
         userNameState = found.state
         userName = found.name
         label = ""

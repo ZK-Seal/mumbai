@@ -31,6 +31,7 @@ struct ResultScreen: View {
     @AppStorage("cover") private var cover = Cover.mask
     @AppStorage("event") private var event = ""
     @AppStorage("userName") private var userName = ""
+    @AppStorage("userSession") private var userSession = ""
     @AppStorage("nameStepShown") private var nameStepShown = false
     @State private var showNameStep = false
     @State private var afterName: URL?
@@ -173,7 +174,8 @@ struct ResultScreen: View {
         failureWord = nil
         let base = AuthoriseLink.base(fromSettings: webAddress)
         Task {
-            switch await world.run(base: base, hash: result.hash, event: AuthoriseLink.event(fromSettings: event)) {
+            switch await world.run(base: base, hash: result.hash, event: AuthoriseLink.event(fromSettings: event),
+                                     session: Names.isSession(userSession) ? userSession : nil) {
             case .authorised(let token, let image):
                 authorising = .authorised
                 imageName = image
