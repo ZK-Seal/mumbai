@@ -1,7 +1,8 @@
 import { Suspense } from "react";
 import { records } from "@/lib/records";
+import { gate } from "@/lib/signin";
 import { isSealHash } from "@/lib/world";
-import { Authorise, type Edit } from "./authorise";
+import { Authorise, type Edit, type SigninNow, type SigninWord } from "./authorise";
 
 type Query = Record<string, string | string[] | undefined>;
 
@@ -24,12 +25,26 @@ function readSeal(query: Query): Seal | null {
   return { hash, edit, width, height };
 }
 
+const WORDS: SigninWord[] = ["denied", "expired", "failed", "class"];
+
+/** The word a sign-in came back with, if it is one of ours. */
+function readWord(value: string | string[] | undefined): SigninWord | null {
+  return WORDS.find((word) => word === value) ?? null;
+}
+
 async function SealPart({ searchParams }: { searchParams: Promise<Query> }) {
-  const seal = readSeal(await searchParams);
+  const query = await searchParams;
+  const seal = readSeal(query);
   if (!seal) {
     return <p className="state bad">This link does not name a seal.</p>;
   }
   const kept = await records().get(seal.hash);
+  const now = await gate();
+  const signin: SigninNow = !now.setUp
+    ? { standing: "not-set-up", account: null }
+    : now.standing === "out"
+      ? { standing: "out", account: null }
+      : { standing: now.standing, account: now.account };
   return (
     <Authorise
       hash={seal.hash}
@@ -37,6 +52,8 @@ async function SealPart({ searchParams }: { searchParams: Promise<Query> }) {
       width={seal.width}
       height={seal.height}
       pass={kept?.pass ?? null}
+      signin={signin}
+      word={readWord(query.signin)}
     />
   );
 }

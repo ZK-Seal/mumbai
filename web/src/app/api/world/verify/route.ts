@@ -1,4 +1,5 @@
 import { records, type SealRecord } from "@/lib/records";
+import { actingAccount } from "@/lib/signin";
 import { boundNullifier, isSealHash, worldAccepts, worldConfig } from "@/lib/world";
 
 function verified(record: SealRecord) {
@@ -6,6 +7,7 @@ function verified(record: SealRecord) {
     state: "verified",
     pass: record.pass,
     credential: record.credential,
+    account: record.account,
     at: record.at,
   });
 }
@@ -13,7 +15,8 @@ function verified(record: SealRecord) {
 /**
  * Finishes one authorisation. The proof must be tied to this seal's hash, and World must
  * accept it. Every answer is a word from a short fixed list. The first authorisation of a seal
- * is kept; a later one gets the kept record back and changes nothing.
+ * is kept; a later one gets the kept record back and changes nothing. When sign-in is set up,
+ * the person must still be freshly signed in, and the record keeps a short name for the account.
  */
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as
@@ -28,6 +31,10 @@ export async function POST(request: Request) {
   }
   const kept = await records().get(body.hash);
   if (kept) return verified(kept);
+  const account = await actingAccount();
+  if (account === false) {
+    return Response.json({ state: "refused", reason: "sign-in" }, { status: 401 });
+  }
   const nullifier = boundNullifier(body.result, body.hash, config);
   if (nullifier === null) {
     return Response.json({ state: "refused", reason: "not-this-seal" }, { status: 422 });
@@ -39,6 +46,7 @@ export async function POST(request: Request) {
     hash: body.hash,
     pass: nullifier,
     credential: config.credential,
+    account,
     at: new Date().toISOString(),
   });
   return verified(record);

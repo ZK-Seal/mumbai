@@ -1,4 +1,5 @@
 import { createHash, hkdfSync, randomBytes, timingSafeEqual } from "node:crypto";
+import { cookies } from "next/headers";
 import { createRemoteJWKSet, EncryptJWT, jwtDecrypt, jwtVerify, type JWTPayload } from "jose";
 
 /**
@@ -401,4 +402,26 @@ export function standing(config: SigninConfig, session: Session): Standing {
 /** A short, stable name for an account that does not reveal its subject. */
 export function accountName(session: Session): string {
   return createHash("sha256").update(`${session.iss}|${session.sub}`).digest("hex").slice(0, 16);
+}
+
+/** What the protected action may go on with. */
+export type Gate =
+  | { setUp: false }
+  | { setUp: true; standing: "out" }
+  | { setUp: true; standing: Standing; account: string };
+
+/** Reads this request's session for the protected action. */
+export async function gate(): Promise<Gate> {
+  const config = signinConfig();
+  if (!config) return { setUp: false };
+  const session = await readSession(config, (await cookies()).get(SESSION_COOKIE)?.value);
+  if (!session) return { setUp: true, standing: "out" };
+  return { setUp: true, standing: standing(config, session), account: accountName(session) };
+}
+
+/** The account to record with an action, or false when the action must not happen. */
+export async function actingAccount(): Promise<string | null | false> {
+  const now = await gate();
+  if (!now.setUp) return null;
+  return now.standing === "fresh" ? now.account : false;
 }

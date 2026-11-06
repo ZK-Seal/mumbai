@@ -131,3 +131,48 @@ button:focus-visible {
     width: 100%;
   }
 }
+
+.signin {
+  margin: 0 0 1.5rem;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+a.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  min-height: 2.75rem;
+  padding: 0.6rem 1.25rem;
+  border: 1px solid var(--ink);
+  border-radius: 0.5rem;
+  background: var(--ink);
+  color: var(--ground);
+  text-decoration: none;
+}
+
+button.quiet {
+  background: transparent;
+  color: var(--ink);
+  border-color: var(--line);
+}
+
+a.button:focus-visible {
+  outline: 3px solid var(--ink);
+  outline-offset: 3px;
+}
+
+@media (max-width: 420px) {
+  .actions {
+    flex-direction: column;
+  }
+
+  a.button {
+    width: 100%;
+  }
+}

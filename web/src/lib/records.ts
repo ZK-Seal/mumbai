@@ -4,11 +4,15 @@ import path from "node:path";
 import type { Credential } from "@/lib/world";
 import { isSealHash } from "@/lib/world";
 
-/** One authorised seal. `pass` is the person's pass number; one person may authorise many seals. */
+/**
+ * One authorised seal. `pass` is the person's pass number; one person may authorise many seals.
+ * `account` is a short name for the World account that was signed in, when sign-in is set up.
+ */
 export type SealRecord = {
   hash: string;
   pass: string;
   credential: Credential;
+  account: string | null;
   at: string;
 };
 
@@ -29,7 +33,11 @@ function readRecord(text: string, hash: string): SealRecord | null {
     return null;
   }
   if (value.credential !== "human" && value.credential !== "selfie") return null;
-  return { hash, pass: value.pass, credential: value.credential, at: value.at };
+  const account =
+    typeof value.account === "string" && /^[0-9a-f]{16}$/.test(value.account)
+      ? value.account
+      : null;
+  return { hash, pass: value.pass, credential: value.credential, account, at: value.at };
 }
 
 /**
@@ -62,8 +70,8 @@ export class FileStore implements RecordStore {
     if (kept) return kept;
     await mkdir(this.dir, { recursive: true });
     const temp = path.join(this.dir, `.${record.hash}.${randomBytes(6).toString("hex")}.tmp`);
-    const { hash, pass, credential, at } = record;
-    await writeFile(temp, JSON.stringify({ hash, pass, credential, at }), { flag: "wx" });
+    const { hash, pass, credential, account, at } = record;
+    await writeFile(temp, JSON.stringify({ hash, pass, credential, account, at }), { flag: "wx" });
     try {
       await link(temp, final);
     } catch (error) {
@@ -74,7 +82,7 @@ export class FileStore implements RecordStore {
     } finally {
       await unlink(temp).catch(() => {});
     }
-    return { hash, pass, credential, at };
+    return { hash, pass, credential, account, at };
   }
 }
 
