@@ -6,6 +6,10 @@ function shortHash(hash: string): string {
   return `${hash.slice(0, 10)}…${hash.slice(-6)}`;
 }
 
+function shortAddress(address: string): string {
+  return `${address.slice(0, 6)}…${address.slice(-4)}`;
+}
+
 function when(at: string): string {
   return `${new Date(at).toISOString().slice(0, 16).replace("T", " ")} UTC`;
 }
@@ -72,6 +76,11 @@ async function EventPart({ params }: { params: Promise<{ event: string }> }) {
                 {group.name ?? (anyNamed ? "No name" : `Person ${i + 1}`)} —{" "}
                 {count(group.photos.length, "photo", "photos")}
               </h2>
+              {group.address && (
+                <p className="soft mono" title={group.address}>
+                  {shortAddress(group.address)}
+                </p>
+              )}
               {group.photos.some((photo) => photo.picture) && (
                 <ol className="pictures">
                   {group.photos.map((photo) =>

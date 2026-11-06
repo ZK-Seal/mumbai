@@ -8,7 +8,12 @@ import { post, readReady, type Ready } from "../authorise/authorise";
 /** Where the person's name stands on chain. */
 type Ens = "pending" | "done";
 
-type Registered = { held: string; label: string; ens: Ens };
+type Registered = { held: string; label: string; address: string | null; ens: Ens };
+
+/** An address cut to its first and last characters, as wallets show one. */
+function shortAddress(address: string): string {
+  return `${address.slice(0, 6)}…${address.slice(-4)}`;
+}
 
 type Phase =
   | { name: "idle" }
@@ -37,12 +42,14 @@ function labelProblem(label: string): string | null {
 
 /** The registered parts of a server answer. Null unless it has a name and a known state. */
 function readRegistered(answer: unknown): Registered | null {
-  const a = answer as { state?: unknown; name?: unknown; ens?: unknown } | null;
+  const a = answer as { state?: unknown; name?: unknown; address?: unknown; ens?: unknown } | null;
   if (a?.state !== "registered" || typeof a.name !== "string") return null;
   if (!/^[a-z0-9][a-z0-9-]{2,19}\.[a-z0-9.-]{3,200}$/.test(a.name)) return null;
   const ens = a.ens === "done" ? "done" : a.ens === "pending" ? "pending" : null;
   if (ens === null) return null;
-  return { held: a.name, label: a.name.slice(0, a.name.indexOf(".")), ens };
+  const address =
+    typeof a.address === "string" && /^0x[0-9a-fA-F]{40}$/.test(a.address) ? a.address : null;
+  return { held: a.name, label: a.name.slice(0, a.name.indexOf(".")), address, ens };
 }
 
 export function Join(props: {
@@ -150,6 +157,14 @@ export function Join(props: {
           <p className="state good" role="status">
             Your name is <span className="mono">{phase.held}</span>
           </p>
+          {phase.address && (
+            <p className="soft">
+              Held by your own address{" "}
+              <span className="mono" title={phase.address}>
+                {shortAddress(phase.address)}
+              </span>
+            </p>
+          )}
           {phase.ens === "done" ? (
             <p className="state good">The name is on chain.</p>
           ) : late ? (
