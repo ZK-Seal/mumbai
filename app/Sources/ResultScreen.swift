@@ -31,6 +31,7 @@ struct ResultScreen: View {
     @AppStorage("cover") private var cover = Cover.mask
     @AppStorage("event") private var event = ""
     @State private var sheet = AuthoriseSheet()
+    @State private var world = WorldStep()
     @State private var authorising = Authorising.notYet
     @State private var picture: UIImage?
     @State private var problem = false
@@ -93,19 +94,29 @@ struct ResultScreen: View {
             .padding(16)
         }
         .task { await load() }
+        .onDisappear { world.stop() }
     }
 
+    /// First the World app, with no page between. If the web side cannot be read or the World app cannot be opened,
+    /// the page in a sheet does the same step.
     /// The page's way back is only a hint. The word shows only after the web side answers with a record for this seal.
     private func authorise(_ link: URL) {
         authorising = .waiting
+        let base = AuthoriseLink.base(fromSettings: webAddress)
         Task {
-            let back = await sheet.open(link)
-            guard AuthoriseLink.saysAuthorised(back, hash: result.hash),
-                  await AuthoriseLink.hasRecord(base: AuthoriseLink.base(fromSettings: webAddress), hash: result.hash) else {
+            switch await world.run(base: base, hash: result.hash, event: AuthoriseLink.event(fromSettings: event)) {
+            case .authorised:
+                authorising = .authorised
+            case .notAuthorised:
                 authorising = .notAuthorised
-                return
+            case .useSheet:
+                let back = await sheet.open(link)
+                guard AuthoriseLink.saysAuthorised(back, hash: result.hash), await AuthoriseLink.hasRecord(base: base, hash: result.hash) else {
+                    authorising = .notAuthorised
+                    return
+                }
+                authorising = .authorised
             }
-            authorising = .authorised
         }
     }
 

@@ -15,6 +15,10 @@ settings:
     PRODUCT_BUNDLE_IDENTIFIER: blank.demo.app
     MARKETING_VERSION: "0.1"
     CURRENT_PROJECT_VERSION: "1"
+packages:
+  IDKit:
+    url: https://github.com/worldcoin/idkit-swift
+    exactVersion: 4.2.0
 targets:
   BlankDemo:
     type: application
@@ -23,9 +27,14 @@ targets:
       - Sources
       - Assets.xcassets
       - Fonts
+    dependencies:
+      - package: IDKit
     info:
       path: build/Info.plist
       properties:
+        CFBundleURLTypes:
+          - CFBundleURLSchemes:
+              - blankdemo
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
         NSLocalNetworkUsageDescription: "The app sends your photo to the service on this network."

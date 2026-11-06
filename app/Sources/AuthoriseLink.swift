@@ -25,6 +25,13 @@ enum AuthoriseLink {
         return parts
     }
 
+    /// A plain address on the web side, with no values. Nil if the base is empty or is not a web address.
+    static func address(base: String, path: String) -> URL? {
+        guard var parts = place(base: base, path: path) else { return nil }
+        parts.query = nil
+        return parts.url
+    }
+
     /// The full address with its values encoded. Nil if the base is empty or is not a web address.
     static func url(base: String, hash: String, edit: String, width: Int, height: Int, event: String? = nil) -> URL? {
         guard var parts = place(base: base, path: "/authorise") else { return nil }
@@ -51,9 +58,7 @@ enum AuthoriseLink {
 
     /// Whether the web side answers with a record for this seal. The access word never goes with this.
     static func hasRecord(base: String, hash: String) async -> Bool {
-        guard var parts = place(base: base, path: "/api/seal/\(hash)") else { return false }
-        parts.query = nil
-        guard let url = parts.url else { return false }
+        guard let url = address(base: base, path: "/api/seal/\(hash)") else { return false }
         let request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 15)
         guard let (data, response) = try? await URLSession.shared.data(for: request),
               (response as? HTTPURLResponse)?.statusCode == 200 else { return false }
