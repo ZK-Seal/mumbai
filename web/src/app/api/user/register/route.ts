@@ -52,9 +52,8 @@ export async function POST(request: Request) {
   if (!config || !treeRoot()) return refused("not-set-up", 503, label);
   const nullifier = boundNullifier(body.result, userSignal(label), config, config.joinAction);
   if (nullifier === null) return refused("not-this-name", 422, label);
-  if (!(await worldAccepts(body.result, config, config.joinAction))) {
-    return refused("not-verified", 422, label);
-  }
+  // World takes one proof per person for the join action, so every refusal that does not need
+  // the proof checked is made before World is asked: a proof World accepted is never wasted.
   let mine: UserRecord | null;
   let held: UserRecord | null;
   try {
@@ -63,6 +62,12 @@ export async function POST(request: Request) {
   } catch {
     return refused("store", 503, label);
   }
+  if (!mine && (held || (await userTaken(label).catch(() => false)))) {
+    return refused("taken", 409, label);
+  }
+  if (!(await worldAccepts(body.result, config, config.joinAction))) {
+    return refused("not-verified", 422, label);
+  }
   if (mine) {
     const ens = await userEns(mine.label);
     // A name kept here that is not on chain yet is asked for again, in case the first try failed.
@@ -70,17 +75,24 @@ export async function POST(request: Request) {
     console.log(`user/register: known label=${mine.label} session issued`);
     return registered(config, mine, ens);
   }
-  if (held || (await userTaken(label).catch(() => false))) return refused("taken", 409, label);
   const at = new Date().toISOString();
   let kept: UserRecord;
   try {
     const address = addressOf({ address: null, pass: nullifier });
     kept = await records().putUser({ label, name: userName(label), pass: nullifier, address, at });
-  } catch {
+  } catch (error) {
+    // World has taken this person's proof, so they cannot make another: keep what is needed to
+    // put the name in by hand.
+    console.error(
+      `user/register: store failed after World accepted label=${label} pass=${nullifier}: ${String(error)}`,
+    );
     return refused("store", 503, label);
   }
   // Another request may have kept this label, or another name for this pass, first.
-  if (kept.pass !== nullifier) return refused("taken", 409, label);
+  if (kept.pass !== nullifier) {
+    console.error(`user/register: taken after World accepted label=${label} pass=${nullifier}`);
+    return refused("taken", 409, label);
+  }
   if (kept.label === label && kept.at === at) {
     after(() => createUserName(label, nullifier));
     console.log(`user/register: registered label=${label} session issued`);
