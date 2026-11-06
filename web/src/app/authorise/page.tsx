@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { appReturn } from "@/lib/app-return";
 import { deskName } from "@/lib/ens";
 import { isEvent, records, type SealRecord } from "@/lib/records";
 import { gate } from "@/lib/signin";
@@ -46,6 +47,8 @@ async function SealPart({ searchParams }: { searchParams: Promise<Query> }) {
   } catch {
     return <p className="state bad">The record of seals cannot be read just now. Try again later.</p>;
   }
+  // The app adds from=app when it opens this page in its sign-in sheet; nothing else counts.
+  const fromApp = query.from === "app";
   const now = await gate();
   const signin: SigninNow = !now.setUp
     ? { standing: "not-set-up", account: null }
@@ -64,6 +67,8 @@ async function SealPart({ searchParams }: { searchParams: Promise<Query> }) {
       desk={deskName()}
       signin={signin}
       word={readWord(query.signin)}
+      fromApp={fromApp}
+      toApp={fromApp ? appReturn(seal.hash) : null}
     />
   );
 }

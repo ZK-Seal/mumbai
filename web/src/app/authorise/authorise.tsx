@@ -8,6 +8,7 @@ import {
   type IDKitResult,
   type RpContext,
 } from "@worldcoin/idkit";
+import type { AppReturn } from "@/lib/app-return";
 import { OtherSeals } from "./other-seals";
 
 export type Edit = "blank" | "blur";
@@ -153,14 +154,19 @@ export function Authorise(props: {
   desk: string | null;
   signin: SigninNow;
   word: SigninWord | null;
+  /** The app opened this page; kept on every link the page makes. */
+  fromApp: boolean;
+  /** The links back to the app, when the app opened this page and the way back is set up. */
+  toApp: AppReturn | null;
 }) {
-  const { hash, event } = props;
+  const { hash, event, toApp } = props;
   const [signin, setSignin] = useState<SigninNow>(props.signin);
   const [word, setWord] = useState<SigninWord | null>(props.word);
   const signinRefused = useRef(false);
   const back =
     `/authorise?hash=${hash}&edit=${props.edit}&w=${props.width}&h=${props.height}` +
-    (event ? `&event=${event}` : "");
+    (event ? `&event=${event}` : "") +
+    (props.fromApp ? "&from=app" : "");
   const startUrl = `/api/auth/start?return=${encodeURIComponent(back)}`;
 
   /** The server said the sign-in is missing, too old or of the wrong class. */
@@ -192,6 +198,12 @@ export function Authorise(props: {
   const [given, setGiven] = useState("");
   const pass = useRef<Verified | null>(null);
 
+  /** The seal is on record now: show it, and hand the person back to the app if it asked. */
+  function authorised(verified: Verified) {
+    setPhase({ name: "verified", ...verified });
+    if (toApp) window.location.assign(toApp.authorised);
+  }
+
   async function start() {
     setPhase({ name: "asking" });
     pass.current = null;
@@ -205,7 +217,7 @@ export function Authorise(props: {
     const word = answer as { state?: unknown; reason?: unknown; pass?: unknown } | null;
     const kept = word?.state === "authorised" ? readVerified(word, word.pass) : null;
     if (kept) {
-      setPhase({ name: "verified", ...kept });
+      authorised(kept);
       return;
     }
     if (word?.reason === "sign-in") {
@@ -235,7 +247,7 @@ export function Authorise(props: {
   }
 
   function done() {
-    if (pass.current) setPhase({ name: "verified", ...pass.current });
+    if (pass.current) authorised(pass.current);
     else if (signinRefused.current) needSignin();
     else setPhase({ name: "denied" });
   }
@@ -285,6 +297,13 @@ export function Authorise(props: {
             </span>
           </p>
           <DeskLine verified={phase} />
+          {toApp && (
+            <div className="actions">
+              <a className="button" href={toApp.authorised}>
+                Back to the app
+              </a>
+            </div>
+          )}
           <OtherSeals key={phase.pass} pass={phase.pass} hash={hash} />
         </>
       ) : phase.name === "denied" ? (
@@ -341,6 +360,12 @@ export function Authorise(props: {
           onSuccess={done}
           onError={failed}
         />
+      )}
+
+      {toApp && phase.name !== "verified" && (
+        <p className="soft">
+          <a href={toApp.cancelled}>Back to the app</a>
+        </p>
       )}
     </>
   );
