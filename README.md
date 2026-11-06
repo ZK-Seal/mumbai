@@ -58,6 +58,10 @@ The app allows plain HTTP on a local network. Over plain HTTP the photo and the 
 
 Public Sans, under the SIL Open Font License. The licence is beside it in `app/Fonts`.
 
+## Licence
+
+The code is under MIT, see `LICENSE`. The font is under its own licence. The zkSeal logo and the mask image are not covered by MIT.
+
 ## What the proof shows
 
 - The sealed picture follows from a signed original by the stated change.
