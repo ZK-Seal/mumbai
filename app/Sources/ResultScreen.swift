@@ -52,6 +52,8 @@ struct ResultScreen: View {
     @State private var world = WorldStep()
     @State private var authorising = Authorising.notYet
     @State private var failureWord: String?
+    /// The web side's own words for a refusal, shown as they are.
+    @State private var failureText: String?
     @State private var pictureToken: String?
     @State private var sending = Sending.none
     @State private var picture: UIImage?
@@ -138,14 +140,14 @@ struct ResultScreen: View {
                         .controlSize(.large)
                         .accessibilityIdentifier("publish")
                         if authorising == .notAuthorised {
-                            Text(failureWord.map { "Not authorised: \($0)" } ?? "Not authorised")
+                            Text(failureText ?? failureWord.map { "Not authorised: \($0)" } ?? "Not authorised")
                                 .font(Theme.text(15))
                                 .frame(maxWidth: .infinity)
                                 .accessibilityIdentifier("notAuthorised")
                         }
                     }
                     // The name the web side gave, as it gave it.
-                    if authorising != .notYet, !userName.isEmpty {
+                    if authorising != .notYet, !userName.isEmpty, Names.isSession(userSession) {
                         Text(userNameState == "pending" ? "\(userName): being created" : userName)
                             .font(Theme.text(14))
                             .foregroundStyle(Theme.muted)
@@ -207,7 +209,7 @@ struct ResultScreen: View {
         showScan = true
     }
 
-    /// Publish, in this order: the nickname and its World step if the person has no name yet, then the badge if the event needs one, then the photo's World step.
+    /// Publish, in this order: the nickname and its World step if the person has no name yet, then the badge if the event needs one, then the photo. With a session the photo needs no second World trip. With none it has its own World step.
     private func pressPublish(_ link: URL) {
         guard userName.isEmpty else {
             goOn(link)
@@ -217,12 +219,13 @@ struct ResultScreen: View {
         showNameStep = true
     }
 
-    /// First the World app, with no page between. If the web side cannot be read or the World app cannot be opened,
-    /// the page in a sheet does the same step.
+    /// With a session, straight to the web side. With none, first the World app, with no page between.
+    /// If the web side cannot be read or the World app cannot be opened, the page in a sheet does the same step.
     /// The page's way back is only a hint. The word shows only after the web side answers with a record for this seal.
     private func authorise(_ link: URL) {
         authorising = .waiting
         failureWord = nil
+        failureText = nil
         let base = AuthoriseLink.base(fromSettings: webAddress)
         Task {
             switch await world.run(base: base, hash: result.hash, event: AuthoriseLink.event(fromSettings: event),
@@ -237,6 +240,15 @@ struct ResultScreen: View {
                 authorising = .notAuthorised
             case .worldFailed(let word):
                 failureWord = word
+                authorising = .notAuthorised
+            case .refused(let text):
+                failureText = text
+                authorising = .notAuthorised
+            case .sessionRefused(let text):
+                // It will not become good. The next press goes on with no name, as any photo with no session does.
+                userSession = ""
+                failureWord = "session"
+                failureText = text
                 authorising = .notAuthorised
             case .noEntry:
                 // The next press scans again.

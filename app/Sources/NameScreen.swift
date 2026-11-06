@@ -91,8 +91,8 @@ struct NameScreen: View {
                 userName = name
                 label = ""
                 onClose?()
-            case .refused(let word):
-                line = Names.sentence(forRefusal: word)
+            case .refused(let word, let text):
+                line = text ?? Names.sentence(forRefusal: word)
             case .worldFailed(let word):
                 line = "World did not finish: \(word)"
             case .unavailable:

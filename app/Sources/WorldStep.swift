@@ -11,6 +11,10 @@ final class WorldStep {
         case notAuthorised
         /// World's own error word, from its fixed list.
         case worldFailed(String)
+        /// The web side's own words for why not, shown as they are.
+        case refused(text: String)
+        /// The web side does not accept the saved session.
+        case sessionRefused(text: String?)
         /// The web side does not accept this person's badge for this event.
         case noEntry
         /// The web side could not be read, or the World app could not be opened, so the sheet takes over.
@@ -19,8 +23,8 @@ final class WorldStep {
 
     enum JoinOutcome {
         case registered(name: String, label: String, state: String, session: String?)
-        /// The web side's own word for why not.
-        case refused(String)
+        /// The web side's own word for why not, and its own words to show, if it gave them.
+        case refused(String, text: String?)
         /// World's own error word, from its fixed list.
         case worldFailed(String)
         /// The routes are not there, or the answer could not be read.
@@ -47,6 +51,7 @@ final class WorldStep {
         }
         var state: String
         var reason: String?
+        var text: String?
         var label: String?
         var app_id: String?
         var action: String?
@@ -61,15 +66,17 @@ final class WorldStep {
         var picture_token: String?
         var image: ImageName?
         var reason: String?
+        var text: String?
 
         /// Only the state is needed. An extra field in another form must not undo "verified".
         init(from decoder: Decoder) throws {
-            enum Keys: String, CodingKey { case state, picture_token, image, reason }
+            enum Keys: String, CodingKey { case state, picture_token, image, reason, text }
             let box = try decoder.container(keyedBy: Keys.self)
             state = try box.decode(String.self, forKey: .state)
             picture_token = try? box.decodeIfPresent(String.self, forKey: .picture_token)
             image = try? box.decodeIfPresent(ImageName.self, forKey: .image)
             reason = try? box.decodeIfPresent(String.self, forKey: .reason)
+            text = try? box.decodeIfPresent(String.self, forKey: .text)
         }
 
         /// Nil unless it has its fixed form, so nothing else can reach a header.
@@ -85,6 +92,7 @@ final class WorldStep {
     private struct Joined: Decodable {
         var state: String
         var reason: String?
+        var text: String?
         var label: String?
         var name: String?
         var ens: NameState?
@@ -93,15 +101,20 @@ final class WorldStep {
 
     private var polling: Task<IDKitCompletionResult, Never>?
 
-    /// With the person's session, the web side files this photo under their name. Without one, the photo stays unnamed.
+    /// With the person's session there is no second World trip: their name was proved at join, and the web side files this photo under it.
+    /// Without a session, the photo has its own World step and stays unnamed.
     /// The ticket says the service checked this hash. It goes both in the body and as a header.
     /// `entry` is the SHA-256 of the person's scanned badge for this event.
     func run(base: String, hash: String, event: String?, session: String?, ticket: String?, entry: String?) async -> Outcome {
+        if let session {
+            let finish: Finish? = await post(base, "/api/world/verify", body(hash: hash, event: event, session: session, ticket: ticket, entry: entry), limit: 120, ticket: ticket)
+            return await ending(finish, base: base, hash: hash)
+        }
         guard let start: Start = await post(base, "/api/world/request", body(hash: hash, event: event, ticket: ticket, entry: entry), limit: 15, ticket: ticket) else { return .useSheet }
         // This answer carries the seal's record itself.
         if start.state == "authorised" { return .authorised(pictureToken: nil, image: nil) }
         if start.reason == "no-entry" { return .noEntry }
-        guard start.state == "ready", start.signal == hash else { return .notAuthorised }
+        guard start.state == "ready", start.signal == hash else { return Self.words(start.text).map { .refused(text: $0) } ?? .notAuthorised }
         let json: String
         switch await prove(start, signal: hash) {
         case .json(let made): json = made
@@ -109,12 +122,26 @@ final class WorldStep {
         case .cannotStart: return .useSheet
         case .unreadable: return .notAuthorised
         }
-        let finish: Finish? = await post(base, "/api/world/verify", body(hash: hash, event: event, result: json, session: session, ticket: ticket, entry: entry), limit: 120, ticket: ticket)
+        let finish: Finish? = await post(base, "/api/world/verify", body(hash: hash, event: event, result: json, ticket: ticket, entry: entry), limit: 120, ticket: ticket)
+        return await ending(finish, base: base, hash: hash)
+    }
+
+    /// What the web side's last answer means, for a photo with or without a session.
+    private func ending(_ finish: Finish?, base: String, hash: String) async -> Outcome {
         if finish?.reason == "no-entry" { return .noEntry }
+        if finish?.reason == "session" { return .sessionRefused(text: Self.words(finish?.text)) }
         // This answer is trusted as it is. A second call could miss a fresh record.
-        if let finish { return finish.state == "verified" ? .authorised(pictureToken: finish.token, image: Names.valid(finish.image)) : .notAuthorised }
+        if let finish {
+            if finish.state == "verified" { return .authorised(pictureToken: finish.token, image: Names.valid(finish.image)) }
+            return Self.words(finish.text).map { .refused(text: $0) } ?? .notAuthorised
+        }
         // With no answer at all, the record may still have been kept.
         return await AuthoriseLink.hasRecord(base: base, hash: hash) ? .authorised(pictureToken: nil, image: nil) : .notAuthorised
+    }
+
+    /// The web side's words to show, if it gave any.
+    private static func words(_ text: String?) -> String? {
+        text.flatMap { $0.isEmpty ? nil : $0 }
     }
 
     /// One person's name: the same World step, with the signal the web side gives. What was typed goes as it is, and the web side alone decides if it can be a name.
@@ -124,8 +151,8 @@ final class WorldStep {
               let start: Start = await post(base, "/api/user/request", "{\"label\":\(sent)}", limit: 15) else { return .unavailable }
         switch start.state {
         case "ready": break
-        case "taken": return .refused("taken")
-        case "refused": return .refused(start.reason ?? "")
+        case "taken": return .refused("taken", text: Self.words(start.text))
+        case "refused": return .refused(start.reason ?? "", text: Self.words(start.text))
         default: return .unavailable
         }
         let label = start.label ?? typed
@@ -144,7 +171,7 @@ final class WorldStep {
             let saved = answer.label.flatMap { Names.isLabel($0) ? $0 : nil } ?? Names.label(of: name) ?? label
             return .registered(name: name, label: saved, state: answer.ens?.state ?? "pending", session: answer.session.flatMap { Names.isSession($0) ? $0 : nil })
         }
-        return .refused(answer.state == "taken" ? "taken" : answer.reason ?? "")
+        return .refused(answer.state == "taken" ? "taken" : answer.reason ?? "", text: Self.words(answer.text))
     }
 
     /// Text a person typed, as a JSON string.

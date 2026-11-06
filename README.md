@@ -14,7 +14,7 @@ And at a protest, one person with several phones can make it look as if many peo
 This demo answers two questions about an event's photos:
 
 - **What was changed?** Each picture is a proven edit of a signed original (our test key in this demo).
-- **How many people stand behind them?** Each picture was approved by one person through World, so the gallery can say "N photos from M people".
+- **How many people stand behind them?** Each name was proved once through World to be one human, so the gallery can say "N photos from M people".
 
 This is a demo. It is never safe for real protesters. See "What is true in this demo".
 
@@ -32,11 +32,11 @@ This is a demo. It is never safe for real protesters. See "What is true in this 
   THE APP
   3. Draw the cover on top. The person presses Publish
      The first time: a nickname and a World proof     ---->  WORLD
-     Each photo: a World proof for this photo's hash  ---->  WORLD
-         |  the World proofs, then the picture with its cover
+     Later photos under that name: no second World trip
+         |  the session, then the picture with its cover
          v
   THE WEB SIDE
-  4. Check each proof with World
+  4. Check the proof with World, and the session
   5. Make the person's name and the picture's name    ---->  ENS
   6. Keep small records                               ---->  ARKIV
   7. Keep the picture                                 ---->  SWARM
@@ -58,7 +58,7 @@ This is a demo. It is never safe for real protesters. See "What is true in this 
 
 1. **Seal.** The person draws over part of a photo. The backend seals it and returns a plain picture and a hash.
 2. **Publish, the first time.** The person chooses a nickname and proves through World that they are one human. The web side refuses a name that is taken, makes the name in the background, keeps a user row on Arkiv, and gives the app a session.
-3. **Publish, each photo.** If an event is set, the person scans a badge once for that event. The person approves the hash through World. The web side keeps a record on Arkiv, with the person's name found through the session. The app sends the picture with its cover. The web side puts it on Swarm, keeps a pointer on Arkiv, and makes the image's name.
+3. **Publish, each photo.** If an event is set, the person scans a badge once for that event. With a session there is no second World trip: the app sends the hash and the session, and the web side keeps a record on Arkiv under the person's name. With no session, the person approves the hash through World, and the photo stays unnamed. The app sends the picture with its cover. The web side puts it on Swarm, keeps a pointer on Arkiv, and makes the image's name.
 4. **Read.** The gallery page reads Arkiv and Swarm, and shows each event's images with their names and their people's names.
 
 ## What each partner adds, and what its prize asks
@@ -69,7 +69,7 @@ One section each. In the tables, **There** means it is done today. **Not there**
 
 Prize: Best Integration of ENSv2 into an Existing Project.
 
-**How we use it.** ENS is used like a folder tree. People and pictures get ENS names, with records on them. A name under `users` exists only after our server has checked a person's World proof. A name under an event exists only after a named person approved that seal.
+**How we use it.** ENS is used like a folder tree. People and pictures get ENS names, with records on them. A name under `users` exists only after our server has checked a person's World proof. A name under an event exists only after a named person published that seal.
 
 ```text
 <root>.eth
@@ -198,7 +198,7 @@ Prize: the Arkiv + Swarm bonus (existing projects).
 
 Prize: [Cont] Best Use of IDKit.
 
-**How we use it.** The Publish button asks for Proof of Human, once to get a name and once for each photo. The app opens the World ID app through World's Swift package, IDKit, pinned to 4.2.0. The web side checks each proof with World before it writes anything (`web/src/lib/world.ts`).
+**How we use it.** The Publish button asks for Proof of Human once, to get a name. Later photos under that name need no second World trip. A photo with no session has its own proof. The app opens the World ID app through World's Swift package, IDKit, pinned to 4.2.0. The web side checks each proof with World before it writes anything (`web/src/lib/world.ts`).
 
 **What it adds to the project.** Without World, one person with several phones looks like a crowd. With it, a page can count how many people stand behind an event's photos, and it does not need to know who they are.
 
@@ -206,9 +206,9 @@ Prize: [Cont] Best Use of IDKit.
 
 **The credential.** Proof of Human. Why it is the least that is enough: TO FILL (Armanc).
 
-**What it proves.** "Approved by a unique human", not "taken by". The identities in this demo are test identities.
+**What it proves.** "Approved by a unique human", not "taken by". For a named person, the approval is of the name, not of each photo. The identities in this demo are test identities.
 
-**One action per photo.** The World app makes one proof per person and action, and refuses a second. So each photo has its own action, drawn from its hash. A session from our server ties the photo to the named person. That link is our server's word.
+**One proof per name.** A person proves once, at join. A session from our server then ties each later photo to that name. That link is our server's word, and no World proof covers that photo. A photo with no session has its own World action, drawn from its hash, because the World app makes one proof per person and action, and refuses a second.
 
 **The other path.** A cancelled or refused proof shows "Not authorised" with World's word. The picture is not sent, and no name is made.
 
@@ -223,7 +223,7 @@ Prize: [Cont] Best Use of IDKit.
 
 | The prize asks for | Where | State |
 | --- | --- | --- |
-| "Integrate IDKit in a functioning application" | `app/Sources/WorldStep.swift`. A photo's World proof passed on a phone, before the steps moved to Publish | There in the code. The Publish path has not run yet |
+| "Integrate IDKit in a functioning application" | `app/Sources/WorldStep.swift`. On a phone, a person got a name through World, and a photo was filed under it, on a local copy of mainnet | There, on that copy. The path with no second World trip has not run yet |
 | "verify the result on the server or onchain" | On the server: `web/src/lib/world.ts`. A contract for it is written, not wired | There, on the server |
 | "the specific product event requiring trust" | "The moment that needs trust", above | There |
 | "the minimum sufficient assurance" | "The credential", above | **Not there**. TO FILL (Armanc) |
@@ -261,7 +261,8 @@ Prize: [Cont] Best Use of IDKit.
 - The contracts are written and fork-tested, not wired. The live path does not send through them. Their check is a signature from a key on our server, not a check of the proof. A contract that checks a World proof itself is written for later.
 - No contract checks a seal's proof. That proof's size and cost rule it out on mainnet today.
 - The backend checks the seal. The web server cannot see the sealed file.
-- An image's name means this: a named person's World proof is bound to this seal's hash, and that person sent this picture.
+- An image's name means this: a person with a World-proven name sent this seal's hash and this picture, through our server's session. No World proof is bound to that seal's hash.
+- Whoever holds a person's session can publish under that name.
 - The authorise page checks only the hash's format, so anyone can type a made-up hash and authorise it.
 - The app sends a ticket from the backend, and the web side does not read it.
 - The badge check is in the phone only. See "A badge for an event".
@@ -305,8 +306,8 @@ The app's screens do not explain any of this, so the facts are here.
 
 "Publish on zk-seal.eth" shows under "Start over", with the picture, only if a web address is set. The picture shows only after the seal's check passed. The address comes from Settings or from `WEB_URL` at launch, and it is not in this repo.
 Its words name the root the tree is moving to. Until that switch is real, names go under `armanc.eth`, and the app shows the name the web side returns.
-Pressing it runs these in order: the nickname, if the person has no name yet; the badge, if an event needs one; then the photo's World step.
-If the web side is ready, the World step goes to the World app and back, with no page between, through World's IDKit package, pinned to 4.2.0. The package's result goes to the web side unchanged. "Authorised" shows only after the web side answers that it verified the result, or answers with a record for this hash. A refusal or a failure shows "Not authorised", and the button stays.
+Pressing it runs these in order: the nickname, if the person has no name yet; the badge, if an event needs one; then the photo. With a session, the photo goes straight to the web side. With none, it takes its own World step.
+If the web side is ready, that World step goes to the World app and back, with no page between, through World's IDKit package, pinned to 4.2.0. The package's result goes to the web side unchanged. "Authorised" shows only after the web side answers that it verified the result, or answers with a record for this hash. A refusal or a failure shows "Not authorised", and the button stays. If the web side gives its own words for a refusal, the app shows those words as they are. If it refuses the saved session, the app forgets that session, and the next press goes on with no name.
 If the web side cannot be read or the World app cannot be opened, it opens that page in a sheet inside the app.
 It sends the hash, the edit, the size and `from=app` to that page, in the link, with no photo. It also sends an event's short name, set in Settings or with `EVENT_SLUG` at launch, but only if it is 3 to 40 lowercase letters, digits and hyphens, with no hyphen first.
 The page comes back through a `blankdemo://` link, and the app does not trust that link alone. "Authorised" shows only if the link names this hash and the web side then answers with a record for it. Anything else shows "Not authorised", and the button stays.
