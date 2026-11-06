@@ -133,6 +133,7 @@ struct ResultScreen: View {
                         ProgressView()
                             .frame(maxWidth: .infinity)
                     case .notYet, .notAuthorised:
+                        EventChooser()
                         Button { pressPublish(link) } label: {
                             Theme.mainLabel(Text("Publish on \(Names.root)"))
                         }

@@ -226,9 +226,7 @@ struct AreaScreen: View {
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .keyboardType(.URL)
-                    TextField("Event", text: $event)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
+                    EventChooser(plain: true)
                 }
                 .listRowBackground(Theme.surface)
                 Section {

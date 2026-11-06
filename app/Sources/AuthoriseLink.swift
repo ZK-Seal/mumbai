@@ -14,7 +14,17 @@ enum AuthoriseLink {
     /// Nil unless it has the form the page accepts, because the page refuses a whole link with any other.
     static func event(fromSettings text: String) -> String? {
         let value = (ProcessInfo.processInfo.environment["EVENT_SLUG"] ?? text).trimmingCharacters(in: .whitespaces)
-        return value.range(of: #"^[a-z0-9][a-z0-9-]{2,39}\z"#, options: .regularExpression) != nil ? value : nil
+        return isEvent(value) ? value : nil
+    }
+
+    /// The form the page accepts for an event's short name.
+    static func isEvent(_ text: String) -> Bool {
+        text.range(of: #"^[a-z0-9][a-z0-9-]{2,39}\z"#, options: .regularExpression) != nil
+    }
+
+    /// Whether the event was set at launch, so that a choice in the app would have no effect.
+    static var eventIsFixed: Bool {
+        ProcessInfo.processInfo.environment["EVENT_SLUG"] != nil
     }
 
     /// A path on the web address. Nil if the base is empty or is not a web address.
