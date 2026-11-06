@@ -80,6 +80,7 @@ export async function POST(request: Request) {
       credential: config.credential,
       account,
       name,
+      event: null,
       at: new Date().toISOString(),
     });
   } catch {

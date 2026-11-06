@@ -5,11 +5,15 @@ import { defineSchema, str, u64 } from "@arkiv-network/sdk/schema";
 import { getAddress, http, isAddress, type Address, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import {
+  EVENT_LIST_LIMIT,
   isAccount,
+  isEvent,
   keptName,
   newestFirst,
+  oldestFirst,
   PASS_LIST_LIMIT,
   StoreError,
+  type EventSeal,
   type PassSeal,
   type RecordStore,
   type SealRecord,
@@ -19,7 +23,8 @@ import { isSealHash } from "@/lib/world";
 /**
  * One authorised seal on Arkiv. Every column is indexed, because each one is something a reader
  * looks up by: the seal, the person's pass, the account, the kind of check, the time, and the
- * person's name at a desk. The name is left out when there is none, as in records kept before it.
+ * person's name at a desk, and the event. The name and the event are left out when there is none,
+ * as in records kept before them.
  */
 export const Seals = defineSchema("blank-demo.seals", {
   hash: str().indexed(),
@@ -28,10 +33,14 @@ export const Seals = defineSchema("blank-demo.seals", {
   credential: str().indexed(),
   at: u64().indexed(),
   name: str().indexed().optional(),
+  event: str().indexed().optional(),
 });
 
 // A record outlives the event by weeks, but is not kept forever.
 export const RECORD_LIFETIME_DAYS = 30;
+
+/** The most rows the node returns in one page. */
+const PAGE_SIZE = 100;
 
 export type ArkivSettings = {
   /** The wallet that writes, and so owns, every record. Only its records are believed. */
@@ -70,6 +79,7 @@ type Row = {
   credential: { value: string };
   at: { value: bigint };
   name?: { value: string };
+  event?: { value: string };
 };
 
 /** A row as a record, or null if it does not say what a record must. */
@@ -85,6 +95,7 @@ function toRecord(row: Row): SealRecord | null {
     credential,
     account: isAccount(account) ? account : null,
     name: keptName(row.name?.value),
+    event: isEvent(row.event?.value) ? (row.event?.value as string) : null,
     at: new Date(ms).toISOString(),
   };
 }
@@ -128,6 +139,7 @@ export class ArkivStore implements RecordStore {
           credential: true,
           at: true,
           name: true,
+          event: true,
         })
         .from(Seals)
         .where(eq("hash", hash))
@@ -171,6 +183,42 @@ export class ArkivStore implements RecordStore {
     return newestFirst(seals);
   }
 
+  async byEvent(event: string): Promise<EventSeal[]> {
+    // A page holds at most PAGE_SIZE rows, so read page after page, oldest first, to the limit.
+    const rows: { hash: { value: string }; pass: { value: string }; at: { value: bigint } }[] = [];
+    try {
+      for (let offset = 0; offset < EVENT_LIST_LIMIT; ) {
+        const page = await this.reader
+          .select({ $key: true, hash: true, pass: true, at: true, event: true })
+          .from(Seals)
+          .where(eq("event", event))
+          .ownedBy(this.settings.owner)
+          .orderBy(asc("at"))
+          .limit(PAGE_SIZE)
+          .offset(offset)
+          .fetch();
+        for (const row of page.entities) if (row.event?.value === event) rows.push(row);
+        const covered = page.entities.length + page.skipped;
+        if (covered < PAGE_SIZE) break;
+        offset += covered;
+      }
+    } catch (error) {
+      throw new StoreError(error);
+    }
+    // One seal may have several rows; the earliest is the one kept, as in get().
+    const seen = new Set<string>();
+    const seals: EventSeal[] = [];
+    for (const row of rows) {
+      const ms = Number(row.at.value);
+      if (!isSealHash(row.hash.value) || !Number.isSafeInteger(ms) || seen.has(row.hash.value)) {
+        continue;
+      }
+      seen.add(row.hash.value);
+      seals.push({ hash: row.hash.value, pass: row.pass.value, at: new Date(ms).toISOString() });
+    }
+    return oldestFirst(seals);
+  }
+
   put(record: SealRecord): Promise<SealRecord> {
     // Two requests for one seal on this server wait for each other rather than both writing.
     const waiting = this.pending.get(record.hash);
@@ -199,6 +247,7 @@ export class ArkivStore implements RecordStore {
           credential: record.credential,
           at: u64(Date.parse(record.at)),
           ...(keptName(record.name) ? { name: record.name as string } : {}),
+          ...(isEvent(record.event) ? { event: record.event } : {}),
         },
         { expiration: ExpirationTime.fromDays(RECORD_LIFETIME_DAYS), flags: { readonly: true } },
       );

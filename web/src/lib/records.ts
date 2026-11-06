@@ -10,6 +10,7 @@ import { isSealHash } from "@/lib/world";
  * One authorised seal. `pass` is the person's pass number; one person may authorise many seals.
  * `account` is a short name for the World account that was signed in, when sign-in is set up.
  * `name` is the person's name at a desk, kept only when the desk vouched for it at the time.
+ * `event` is the event the photo was sealed at, when the link named one.
  */
 export type SealRecord = {
   hash: string;
@@ -17,6 +18,7 @@ export type SealRecord = {
   credential: Credential;
   account: string | null;
   name: string | null;
+  event: string | null;
   at: string;
 };
 
@@ -27,12 +29,45 @@ export interface RecordStore {
   put(record: SealRecord): Promise<SealRecord>;
   /** The newest seals authorised with this pass, at most PASS_LIST_LIMIT of them. */
   byPass(pass: string): Promise<PassSeal[]>;
+  /** The seals authorised at this event, oldest first, at most EVENT_LIST_LIMIT of them. */
+  byEvent(event: string): Promise<EventSeal[]>;
 }
 
 /** One seal in the list of seals a pass authorised. The edit is not kept, so it is not here. */
 export type PassSeal = { hash: string; at: string };
 
 export const PASS_LIST_LIMIT = 10;
+
+/** One seal authorised at an event, with the pass that authorised it. */
+export type EventSeal = { hash: string; pass: string; at: string };
+
+export const EVENT_LIST_LIMIT = 500;
+
+/** An event is named by a short slug: lowercase letters, digits and dashes. */
+export function isEvent(value: unknown): value is string {
+  return typeof value === "string" && /^[a-z0-9][a-z0-9-]{2,39}$/.test(value);
+}
+
+/** Oldest first, then by hash so the order never wobbles; at most EVENT_LIST_LIMIT. */
+export function oldestFirst(seals: EventSeal[]): EventSeal[] {
+  return seals
+    .sort((a, b) => (a.at !== b.at ? (a.at < b.at ? -1 : 1) : a.hash < b.hash ? -1 : 1))
+    .slice(0, EVENT_LIST_LIMIT);
+}
+
+/** The seals of one person at an event. The pass is left out, as the pass list leaves it out. */
+export type EventGroup = { photos: PassSeal[] };
+
+/** One group per pass, in the order each pass was first seen; each group oldest first. */
+export function byPerson(seals: EventSeal[]): EventGroup[] {
+  const groups = new Map<string, PassSeal[]>();
+  for (const { hash, pass, at } of oldestFirst(seals)) {
+    const photos = groups.get(pass) ?? [];
+    photos.push({ hash, at });
+    groups.set(pass, photos);
+  }
+  return [...groups.values()].map((photos) => ({ photos }));
+}
 
 /** A pass is a number, in decimal or 0x hex, short enough to be kept. */
 export function isPass(value: unknown): value is string {
@@ -77,7 +112,9 @@ function readRecord(text: string, hash: string): SealRecord | null {
   if (value.credential !== "human" && value.credential !== "selfie") return null;
   const account = isAccount(value.account) ? value.account : null;
   const name = keptName(value.name);
-  return { hash, pass: value.pass, credential: value.credential, account, name, at: value.at };
+  const event = isEvent(value.event) ? value.event : null;
+  const { pass, credential, at } = value;
+  return { hash, pass, credential, account, name, event, at };
 }
 
 /**
@@ -112,7 +149,8 @@ export class FileStore implements RecordStore {
     const temp = path.join(this.dir, `.${record.hash}.${randomBytes(6).toString("hex")}.tmp`);
     const { hash, pass, credential, account, at } = record;
     const name = keptName(record.name);
-    await writeFile(temp, JSON.stringify({ hash, pass, credential, account, name, at }), {
+    const event = isEvent(record.event) ? record.event : null;
+    await writeFile(temp, JSON.stringify({ hash, pass, credential, account, name, event, at }), {
       flag: "wx",
     });
     try {
@@ -125,10 +163,11 @@ export class FileStore implements RecordStore {
     } finally {
       await unlink(temp).catch(() => {});
     }
-    return { hash, pass, credential, account, name, at };
+    return { hash, pass, credential, account, name, event, at };
   }
 
-  async byPass(pass: string): Promise<PassSeal[]> {
+  /** Every record kept in the directory. */
+  private async all(): Promise<SealRecord[]> {
     let names: string[];
     try {
       names = await readdir(this.dir);
@@ -136,14 +175,24 @@ export class FileStore implements RecordStore {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
       throw new StoreError(error);
     }
-    const found: PassSeal[] = [];
+    const found: SealRecord[] = [];
     for (const name of names) {
       const hash = name.endsWith(".json") ? name.slice(0, -5) : "";
       if (!isSealHash(hash)) continue;
       const record = await this.get(hash);
-      if (record?.pass === pass) found.push({ hash, at: record.at });
+      if (record) found.push(record);
     }
-    return newestFirst(found);
+    return found;
+  }
+
+  async byPass(pass: string): Promise<PassSeal[]> {
+    const found = (await this.all()).filter((record) => record.pass === pass);
+    return newestFirst(found.map(({ hash, at }) => ({ hash, at })));
+  }
+
+  async byEvent(event: string): Promise<EventSeal[]> {
+    const found = (await this.all()).filter((record) => record.event === event);
+    return oldestFirst(found.map(({ hash, pass, at }) => ({ hash, pass, at })));
   }
 }
 
