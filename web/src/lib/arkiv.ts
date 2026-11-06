@@ -1,9 +1,23 @@
-import { createPublicClient, createWalletClient, ExpirationTime } from "@arkiv-network/sdk";
+import {
+  createPublicClient,
+  createWalletClient,
+  ExpirationTime,
+  type TxParams,
+} from "@arkiv-network/sdk";
 import { rabdi } from "@arkiv-network/sdk/chains";
 import { asc, desc, eq } from "@arkiv-network/sdk/query";
 import { defineSchema, str, u64 } from "@arkiv-network/sdk/schema";
-import { getAddress, http, isAddress, type Address, type Hex } from "viem";
+import {
+  custom,
+  getAddress,
+  http,
+  isAddress,
+  MethodNotFoundRpcError,
+  type Address,
+  type Hex,
+} from "viem";
 import { privateKeyToAccount } from "viem/accounts";
+import { getGasPrice } from "viem/actions";
 import {
   EVENT_LIST_LIMIT,
   isAccount,
@@ -58,6 +72,13 @@ export const RECORD_LIFETIME_DAYS = 30;
 
 /** The most rows the node returns in one page. */
 const PAGE_SIZE = 100;
+
+/** The least gas a single create is sent with on Rabdi, whose estimates can fall short. */
+const GAS_FLOOR = BigInt(1_000_000);
+
+/** How often, and how far apart, a write is looked for before it is reported or tried again. */
+const READ_BACK_TRIES = 5;
+const READ_BACK_PAUSE_MS = 1000;
 
 export type ArkivSettings = {
   /** The wallet that writes every record. Only records it created, read-only, are believed. */
@@ -205,6 +226,89 @@ function firstPerSeal<T extends Provenance & { hash: { value: string } }>(rows: 
   });
 }
 
+/** A write that was refused before anything was sent, so nothing can have landed. */
+class NotSent extends Error {
+  constructor(cause?: unknown) {
+    super("not sent", { cause });
+  }
+}
+
+/** The estimate the guarded wallet stops at, so that nothing is ever signed or sent by it. */
+class Estimated extends Error {
+  constructor(readonly gas: bigint) {
+    super("estimated");
+  }
+}
+
+/** The errors an error was caused by, nearest first. */
+function causes(error: unknown): unknown[] {
+  const chain: unknown[] = [];
+  for (let at = error; at && chain.length < 24; at = (at as { cause?: unknown }).cause) {
+    chain.push(at);
+    if (typeof at !== "object") break;
+  }
+  return chain;
+}
+
+/**
+ * Whether the node turned the transaction away for its nonce: another transaction from this
+ * wallet took the nonce first, so this one was never admitted and may be sent again. Only an
+ * error with no transaction hash counts; one with a hash may have landed.
+ */
+export function isNonceRefusal(error: unknown): boolean {
+  const chain = causes(error);
+  if (chain.some((e) => typeof (e as { txHash?: unknown })?.txHash === "string")) return false;
+  return chain.some((e) => {
+    const { name, message } = (e ?? {}) as { name?: unknown; message?: unknown };
+    if (name === "NonceTooLowError") return true;
+    return (
+      typeof message === "string" &&
+      /nonce too low|nonce has already been used|replacement transaction underpriced/i.test(message)
+    );
+  });
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * The writes of each wallet in this process, one after another: two writes sent at once would be
+ * given the same nonce. This holds only within one process. Several server instances (on Vercel,
+ * say) sharing the wallet can still race: the latest/pending nonce check before each send narrows
+ * that, and a send the node turns away for its nonce is read back and then tried once more. Two
+ * servers writing the same seal at once may both land a row; every read keeps the first created.
+ */
+const queues = new Map<string, Promise<unknown>>();
+
+export function queued<T>(wallet: string, work: () => Promise<T>): Promise<T> {
+  const before = queues.get(wallet) ?? Promise.resolve();
+  const run = before.then(work, work);
+  const after = run.then(
+    () => {},
+    () => {},
+  );
+  queues.set(wallet, after);
+  void after.then(() => {
+    if (queues.get(wallet) === after) queues.delete(wallet);
+  });
+  return run;
+}
+
+/** The methods the estimating wallet may call: reads only, and the estimate it stops at. */
+const ESTIMATE_READS = new Set([
+  "eth_chainId",
+  "eth_blockNumber",
+  "eth_getBlockByNumber",
+  "eth_getTransactionCount",
+  "eth_gasPrice",
+  "eth_maxPriorityFeePerGas",
+  "eth_estimateGas",
+]);
+
+/** One create, run either by the estimating wallet or by the writing one. */
+type Create = (wallet: Writer, txParams?: TxParams) => Promise<unknown>;
+
+type Writer = ReturnType<typeof createWalletClient>;
+
 /**
  * Keeps each record as an entity on Arkiv's testnet, created read-only by the server's wallet.
  * Anyone may write an entity that looks like ours, and may hand it to our wallet, so every read
@@ -214,12 +318,20 @@ function firstPerSeal<T extends Provenance & { hash: { value: string } }>(rows: 
 export class ArkivStore implements RecordStore {
   private readonly chain;
   private readonly reader;
+  private readonly writer: Writer | null;
   private readonly pending = new Map<string, Promise<SealRecord>>();
   private readonly pendingPictures = new Map<string, Promise<PictureRecord>>();
 
   constructor(private readonly settings: ArkivSettings) {
     this.chain = rabdi({ accessKey: settings.accessKey });
     this.reader = createPublicClient({ chain: this.chain, transport: http(), cacheTime: 0 });
+    this.writer = settings.privateKey
+      ? createWalletClient({
+          chain: this.chain,
+          transport: http(),
+          account: privateKeyToAccount(settings.privateKey),
+        })
+      : null;
   }
 
   private seals() {
@@ -328,30 +440,19 @@ export class ArkivStore implements RecordStore {
       ...(keptName(record.name) ? { name: record.name as string } : {}),
       ...(isEvent(record.event) ? { event: record.event } : {}),
     };
-    const kept = await this.get(record.hash);
-    if (kept) return kept;
-    if (!this.settings.privateKey) throw new StoreError();
-    const writer = createWalletClient({
-      chain: this.chain,
-      transport: http(),
-      account: privateKeyToAccount(this.settings.privateKey),
-    });
-    try {
-      await writer.createEntity(
-        Seals,
-        values,
-        {
-          expiration: ExpirationTime.fromDays(RECORD_LIFETIME_DAYS),
-          flags: { readonly: true, permissionlessExtension: false },
-        },
-      );
-    } catch (error) {
-      throw new StoreError(error);
-    }
-    // Read back: if another server wrote the same seal first, its record is the one kept.
-    const written = await this.get(record.hash);
-    if (!written) throw new StoreError();
-    return written;
+    return this.keep(
+      () => this.get(record.hash),
+      (wallet, txParams) =>
+        wallet.createEntity(
+          Seals,
+          values,
+          {
+            expiration: ExpirationTime.fromDays(RECORD_LIFETIME_DAYS),
+            flags: { readonly: true, permissionlessExtension: false },
+          },
+          txParams,
+        ),
+    );
   }
 
   async getPicture(hash: string): Promise<PictureRecord | null> {
@@ -422,29 +523,132 @@ export class ArkivStore implements RecordStore {
       size: u64(fresh.bytes),
       ...(fresh.event !== null ? { event: fresh.event } : {}),
     };
-    const kept = await this.getPicture(fresh.hash);
+    return this.keep(
+      () => this.getPicture(fresh.hash),
+      (wallet, txParams) =>
+        wallet.createEntity(
+          Pictures,
+          values,
+          {
+            expiration: ExpirationTime.fromDays(RECORD_LIFETIME_DAYS),
+            flags: { readonly: true, permissionlessExtension: false },
+          },
+          txParams,
+        ),
+    );
+  }
+
+  /**
+   * Writes once unless something is kept already, and returns what is kept. After a write, or a
+   * failure that may have been one (a timeout, a lost answer), the write is looked for before
+   * anything is reported, and it is never sent again unless the node turned it away for its
+   * nonce: so a second row for the same seal is not written while the first is still on its way.
+   * If several are written all the same, by several servers at once, every read keeps the first.
+   */
+  private async keep<T>(find: () => Promise<T | null>, create: Create): Promise<T> {
+    const kept = await find();
     if (kept) return kept;
-    if (!this.settings.privateKey) throw new StoreError();
-    const writer = createWalletClient({
-      chain: this.chain,
-      transport: http(),
-      account: privateKeyToAccount(this.settings.privateKey),
-    });
-    try {
-      await writer.createEntity(
-        Pictures,
-        values,
-        {
-          expiration: ExpirationTime.fromDays(RECORD_LIFETIME_DAYS),
-          flags: { readonly: true, permissionlessExtension: false },
-        },
-      );
-    } catch (error) {
-      throw new StoreError(error);
+    if (!this.writer) throw new StoreError();
+    for (let attempt = 1; ; attempt++) {
+      let failure: unknown = null;
+      try {
+        await queued(this.settings.creator, () => this.send(create));
+      } catch (error) {
+        if (error instanceof NotSent) throw new StoreError(error.cause);
+        failure = error;
+      }
+      const found = await this.readBack(find);
+      if (found) return found;
+      if (attempt > 1 || failure === null || !isNonceRefusal(failure)) {
+        throw new StoreError(failure);
+      }
     }
-    // Read back: if another server kept a picture for this seal first, its pointer is the one kept.
-    const written = await this.getPicture(fresh.hash);
-    if (!written) throw new StoreError();
-    return written;
+  }
+
+  /** Looks for a write up to READ_BACK_TRIES times, READ_BACK_PAUSE_MS apart. */
+  private async readBack<T>(find: () => Promise<T | null>): Promise<T | null> {
+    for (let attempt = 0; attempt < READ_BACK_TRIES; attempt++) {
+      if (attempt > 0) await sleep(READ_BACK_PAUSE_MS);
+      try {
+        const found = await find();
+        if (found) return found;
+      } catch {
+        // Not readable yet; look again.
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Sends one create with every field set: gas of at least max(1,000,000, twice the estimate)
+   * and at most half a block, the latest nonce once nothing of ours is pending, and the network's
+   * gas price. Anything refused before the send throws NotSent.
+   */
+  private async send(create: Create): Promise<void> {
+    const writer = this.writer;
+    if (!writer) throw new NotSent();
+    let txParams: TxParams;
+    try {
+      const estimate = await this.estimate(create);
+      const twice = BigInt(2) * estimate;
+      const gas = twice > GAS_FLOOR ? twice : GAS_FLOOR;
+      const block = await this.reader.getBlock({ blockTag: "latest" });
+      if (gas > block.gasLimit / BigInt(2)) throw new Error("gas above half a block");
+      const address = this.settings.creator;
+      let nonce = -1;
+      for (let attempt = 0; attempt < READ_BACK_TRIES; attempt++) {
+        if (attempt > 0) await sleep(READ_BACK_PAUSE_MS);
+        const latest = await this.reader.getTransactionCount({ address, blockTag: "latest" });
+        const waiting = await this.reader.getTransactionCount({ address, blockTag: "pending" });
+        if (latest === waiting) {
+          nonce = latest;
+          break;
+        }
+      }
+      if (nonce < 0) throw new Error("another write from this wallet is pending");
+      const gasPrice = await getGasPrice(this.reader);
+      if (gas * gasPrice > (await this.reader.getBalance({ address }))) {
+        throw new Error("not enough funds for the gas");
+      }
+      txParams = { nonce, gas, gasPrice };
+    } catch (error) {
+      throw error instanceof NotSent ? error : new NotSent(error);
+    }
+    await create(writer, txParams);
+  }
+
+  /**
+   * The node's gas estimate for exactly this create, through a wallet that holds no key and may
+   * only read: it stops at the estimate, so nothing is signed or sent.
+   */
+  async estimate(create: Create): Promise<bigint> {
+    const rpc = http(undefined, { retryCount: 0 })({ chain: this.chain });
+    const transport = custom(
+      {
+        async request(args: { method: string; params?: unknown }) {
+          // Without this, viem may ask the node to fill the whole transaction instead.
+          if (args.method === "eth_fillTransaction") throw new MethodNotFoundRpcError(new Error());
+          if (!ESTIMATE_READS.has(args.method)) throw new NotSent();
+          const result = await rpc.request(args as Parameters<typeof rpc.request>[0]);
+          if (args.method !== "eth_estimateGas") return result;
+          if (typeof result !== "string" || !/^0x[0-9a-f]+$/i.test(result)) throw new NotSent();
+          throw new Estimated(BigInt(result));
+        },
+      },
+      { retryCount: 0 },
+    );
+    const wallet = createWalletClient({
+      chain: this.chain,
+      transport,
+      account: this.settings.creator,
+    }) as unknown as Writer;
+    try {
+      await create(wallet);
+    } catch (error) {
+      const found = causes(error).find((e) => e instanceof Estimated) as Estimated | undefined;
+      if (found && found.gas > BigInt(0)) return found.gas;
+      throw new NotSent(error);
+    }
+    throw new NotSent();
   }
 }
