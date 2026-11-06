@@ -8,9 +8,9 @@ enum Cover: String {
 }
 
 enum AreaPreview {
-    /// The main yellow of the face's picture. The mask's area is filled with it.
-    fileprivate static let yellow = UIColor(red: 185 / 255, green: 137 / 255, blue: 6 / 255, alpha: 1)
-    /// How many cells the cover reaches past the sealed cells. This rounds its edge and covers every corner.
+    /// The flat yellow that pads the face's square picture, the same to the last digit.
+    fileprivate static let yellow = UIColor(red: 248 / 255, green: 196 / 255, blue: 40 / 255, alpha: 1)
+    /// About how many cells the cover reaches past the sealed cells.
     fileprivate static let reach = 2
     /// The width of the drawing screen's layers: enough for the screen, and much lighter than the photo.
     private static let layerWidth = 1100
@@ -70,7 +70,7 @@ enum AreaPreview {
 /// Draws one cover. The mask reads no pixel of the picture. The mosaic reads only pixels outside the area.
 private struct Painter {
     private enum Look {
-        case mask(face: UIImage, spots: [(centre: CGPoint, half: CGFloat)])
+        case mask(face: UIImage, places: [(rect: CGRect, centre: CGPoint)])
         case mosaic(tiles: UIImage, side: CGFloat)
     }
 
@@ -82,8 +82,11 @@ private struct Painter {
         self.area = area
         switch cover {
         case .mask:
-            guard let face = UIImage(named: "AreaFace"), let outline = FaceOutline(face) else { return nil }
-            look = .mask(face: face, spots: area.pieces.indices.map { area.largestSpot(inPiece: $0, for: outline) })
+            guard let face = UIImage(named: "AreaFace") else { return nil }
+            look = .mask(face: face, places: area.pieces.indices.map { piece in
+                let spot = area.largestSpot(inPiece: piece)
+                return (Self.faceRect(at: spot.centre, room: spot.half, over: area.bounds(ofPiece: piece)), spot.centre)
+            })
         case .mosaic:
             guard let tiles = Mosaic.tiles(image, area: area, width: width, height: height) else { return nil }
             look = .mosaic(tiles: tiles.image, side: tiles.side)
@@ -91,26 +94,45 @@ private struct Painter {
     }
 
     func centre(ofPiece piece: Int) -> CGPoint {
-        if case .mask(_, let spots) = look { return spots[piece].centre }
+        if case .mask(_, let places) = look { return places[piece].centre }
         return area.middle(ofPiece: piece)
     }
 
-    /// One rounded box around each box, so the cover reaches every sealed cell, with a smooth edge.
+    /// Where the middle of the eyes and smile is in the face's picture, and how far they reach from there.
+    /// Half the picture's side is 1.
+    private static let marksMiddle = CGPoint(x: -0.125, y: 0.065)
+    private static let marksReach: CGFloat = 0.67
+    /// The most the face may be stretched one way.
+    private static let mostStretch: CGFloat = 1.25
+
+    /// The face's picture over one piece: just large enough to cover it, with the eyes and smile at its roundest place.
+    /// On a long thin piece the stretch and the eyes' room come first, and the picture's own flat yellow does the rest.
+    private static func faceRect(at centre: CGPoint, room: CGFloat, over bounds: CGRect) -> CGRect {
+        let (x, y) = (marksMiddle.x, marksMiddle.y)
+        var wide = max((centre.x - bounds.minX) / (1 + x), (bounds.maxX - centre.x) / (1 - x))
+        var tall = max((centre.y - bounds.minY) / (1 + y), (bounds.maxY - centre.y) / (1 - y))
+        wide = min(wide, room / marksReach)
+        tall = min(tall, room / marksReach)
+        wide = min(wide, tall * mostStretch)
+        tall = min(tall, wide * mostStretch)
+        return CGRect(x: centre.x - (1 + x) * wide, y: centre.y - (1 + y) * tall, width: 2 * wide, height: 2 * tall)
+    }
+
+    /// The cover, inside one smooth line that holds every sealed cell.
     func paint(_ boxes: [GridBox], pieces chosen: (Int) -> Bool, in context: CGContext) {
-        let past = area.cell * CGFloat(AreaPreview.reach)
-        let edge = UIBezierPath()
-        for box in boxes {
-            edge.append(UIBezierPath(roundedRect: CGRect(x: box.x, y: box.y, width: box.width, height: box.height).insetBy(dx: -past, dy: -past),
-                                     cornerRadius: past))
-        }
+        let edge = AreaOutline.path(around: boxes, cell: area.cellSize, width: area.columns * area.cellSize, height: area.rows * area.cellSize)
         switch look {
-        case .mask(let face, let spots):
+        case .mask(let face, let places):
+            // The same yellow as the picture's own padding, so every sealed cell is covered and no second colour shows.
             AreaPreview.yellow.setFill()
             edge.fill()
+            context.saveGState()
+            edge.addClip()
             context.interpolationQuality = .high
-            for (piece, spot) in spots.enumerated() where chosen(piece) {
-                face.draw(in: CGRect(x: spot.centre.x - spot.half, y: spot.centre.y - spot.half, width: 2 * spot.half, height: 2 * spot.half))
+            for (piece, place) in places.enumerated() where chosen(piece) {
+                face.draw(in: place.rect)
             }
+            context.restoreGState()
         case .mosaic(let tiles, let side):
             context.saveGState()
             edge.addClip()
@@ -230,37 +252,6 @@ private struct RawPixels {
     }
 }
 
-/// The edge of the face in its square picture: points around its middle, where half the square's side is 1.
-private struct FaceOutline {
-    let points: [CGPoint]
-
-    init?(_ face: UIImage) {
-        guard let picture = face.cgImage, picture.width == picture.height, let space = CGColorSpace(name: CGColorSpace.sRGB) else { return nil }
-        let side = picture.width
-        var bytes = [UInt8](repeating: 0, count: side * side * 4)
-        let drew: Bool = bytes.withUnsafeMutableBytes { raw in
-            guard let context = CGContext(data: raw.baseAddress, width: side, height: side, bitsPerComponent: 8, bytesPerRow: side * 4,
-                                          space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return false }
-            context.draw(picture, in: CGRect(x: 0, y: 0, width: side, height: side))
-            return true
-        }
-        guard drew else { return nil }
-        let half = Double(side) / 2
-        points = (0..<72).map { step in
-            let angle = Double(step) / 72 * 2 * .pi
-            var reach = half
-            // From the square's edge inward, to the first pixel that is mostly there.
-            while reach > 0 {
-                let x = Int(half + reach * cos(angle))
-                let y = Int(half + reach * sin(angle))
-                if x >= 0, y >= 0, x < side, y < side, bytes[(y * side + x) * 4 + 3] >= 128 { break }
-                reach -= 1
-            }
-            return CGPoint(x: reach / half * cos(angle), y: reach / half * sin(angle))
-        }
-    }
-}
-
 /// Which cells are in the boxes, in separate pieces: cells that touch along a side are one piece.
 private struct CellArea {
     let cell: CGFloat
@@ -374,19 +365,30 @@ private struct CellArea {
         return column < columns && row < rows && near[row * columns + column]
     }
 
-    /// Whether the face, with half its picture's side this long, stays in the yellow. It also checks inside the edge.
-    private func fits(_ outline: FaceOutline, _ centre: CGPoint, _ half: CGFloat, in near: [Bool]) -> Bool {
+    /// Whether a circle of this radius stays in the yellow. It also checks inside its edge.
+    private func fits(_ circle: [CGPoint], _ centre: CGPoint, _ half: CGFloat, in near: [Bool]) -> Bool {
         for share in [1, 0.8, 0.5] as [CGFloat] {
-            for point in outline.points where !holds(centre.x + point.x * half * share, centre.y + point.y * half * share, in: near) {
+            for point in circle where !holds(centre.x + point.x * half * share, centre.y + point.y * half * share, in: near) {
                 return false
             }
         }
         return true
     }
 
-    /// The place in one piece where the face can be largest, nearest the piece's middle among equals.
-    /// It almost touches the yellow's edges.
-    func largestSpot(inPiece index: Int, for outline: FaceOutline) -> (centre: CGPoint, half: CGFloat) {
+    /// The piece's box, out to the yellow's edge.
+    func bounds(ofPiece index: Int) -> CGRect {
+        let past = cell * CGFloat(AreaPreview.reach)
+        var box = CGRect.null
+        for at in pieces[index] {
+            box = box.union(CGRect(x: CGFloat(at % columns) * cell, y: CGFloat(at / columns) * cell, width: cell, height: cell))
+        }
+        return box.insetBy(dx: -past, dy: -past)
+    }
+
+    /// The roundest place in one piece: the middle and radius of the largest circle in the yellow,
+    /// nearest the piece's middle among equals.
+    func largestSpot(inPiece index: Int) -> (centre: CGPoint, half: CGFloat) {
+        let circle = (0..<72).map { CGPoint(x: cos(Double($0) / 72 * 2 * .pi), y: sin(Double($0) / 72 * 2 * .pi)) }
         let piece = pieces[index]
         let near = reachOf(piece)
         func centre(of at: Int) -> CGPoint {
@@ -399,20 +401,20 @@ private struct CellArea {
             let here = centre(of: at)
             let offMiddle = hypot(here.x - middle.x, here.y - middle.y)
             let known = best?.half ?? cell / 2
-            guard fits(outline, here, known, in: near) else { continue }
-            if fits(outline, here, known + 1, in: near) {
+            guard fits(circle, here, known, in: near) else { continue }
+            if fits(circle, here, known + 1, in: near) {
                 var (low, high) = (known + 1, limit)
                 while high - low > 1 {
                     let half = (low + high) / 2
-                    if fits(outline, here, half, in: near) { low = half } else { high = half }
+                    if fits(circle, here, half, in: near) { low = half } else { high = half }
                 }
                 best = (here, low, offMiddle)
             } else if offMiddle < best?.offMiddle ?? .greatestFiniteMagnitude {
                 best = (here, known, offMiddle)
             }
         }
-        // A thin piece may not hold even the smallest face. Then it takes one cell's size at the piece's middle.
+        // A very thin piece may not hold even the smallest circle. Then it takes one cell's size at its middle.
         guard let best else { return (middle, cell / 2) }
-        return (best.centre, best.half * 0.98)
+        return (best.centre, best.half)
     }
 }
