@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { records } from "@/lib/records";
+import { records, type SealRecord } from "@/lib/records";
 import { gate } from "@/lib/signin";
 import { isSealHash } from "@/lib/world";
 import { Authorise, type Edit, type SigninNow, type SigninWord } from "./authorise";
@@ -38,7 +38,12 @@ async function SealPart({ searchParams }: { searchParams: Promise<Query> }) {
   if (!seal) {
     return <p className="state bad">This link does not name a seal.</p>;
   }
-  const kept = await records().get(seal.hash);
+  let kept: SealRecord | null;
+  try {
+    kept = await records().get(seal.hash);
+  } catch {
+    return <p className="state bad">The record of seals cannot be read just now. Try again later.</p>;
+  }
   const now = await gate();
   const signin: SigninNow = !now.setUp
     ? { standing: "not-set-up", account: null }

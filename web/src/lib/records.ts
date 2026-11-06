@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { mkdir, readFile, link, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { ArkivStore, arkivSettings } from "@/lib/arkiv";
 import type { Credential } from "@/lib/world";
 import { isSealHash } from "@/lib/world";
 
@@ -17,9 +18,23 @@ export type SealRecord = {
 };
 
 export interface RecordStore {
+  /** The record kept for this seal, or null if it has none. Throws a StoreError if unsure. */
   get(hash: string): Promise<SealRecord | null>;
   /** Keeps the record unless the hash already has one. Returns whichever record is kept. */
   put(record: SealRecord): Promise<SealRecord>;
+}
+
+/** The store could not be read or written, so nothing can be said about the seal. */
+export class StoreError extends Error {
+  readonly word = "store";
+  constructor(cause?: unknown) {
+    super("store", { cause });
+  }
+}
+
+/** An account name, as the sign-in keeps it: 16 lowercase hex characters. */
+export function isAccount(value: unknown): value is string {
+  return typeof value === "string" && /^[0-9a-f]{16}$/.test(value);
 }
 
 function readRecord(text: string, hash: string): SealRecord | null {
@@ -33,10 +48,7 @@ function readRecord(text: string, hash: string): SealRecord | null {
     return null;
   }
   if (value.credential !== "human" && value.credential !== "selfie") return null;
-  const account =
-    typeof value.account === "string" && /^[0-9a-f]{16}$/.test(value.account)
-      ? value.account
-      : null;
+  const account = isAccount(value.account) ? value.account : null;
   return { hash, pass: value.pass, credential: value.credential, account, at: value.at };
 }
 
@@ -59,7 +71,7 @@ export class FileStore implements RecordStore {
       text = await readFile(this.file(hash), "utf8");
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
-      throw error;
+      throw new StoreError(error);
     }
     return readRecord(text, hash);
   }
@@ -75,9 +87,9 @@ export class FileStore implements RecordStore {
     try {
       await link(temp, final);
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw new StoreError(error);
       const other = await this.get(record.hash);
-      if (!other) throw error;
+      if (!other) throw new StoreError(error);
       return other;
     } finally {
       await unlink(temp).catch(() => {});
@@ -88,8 +100,15 @@ export class FileStore implements RecordStore {
 
 let store: RecordStore | null = null;
 
-/** The store this server uses, kept under DATA_DIR (default `.data`). */
+/**
+ * The store this server uses. With ARKIV_PRIVATE_KEY (or ARKIV_OWNER, to read only) the records
+ * live on Arkiv; otherwise each is a file under DATA_DIR (default `.data`).
+ */
 export function records(): RecordStore {
-  store ??= new FileStore(path.resolve(process.env.DATA_DIR || ".data", "seals"));
+  if (store) return store;
+  const arkiv = arkivSettings();
+  store = arkiv
+    ? new ArkivStore(arkiv)
+    : new FileStore(path.resolve(process.env.DATA_DIR || ".data", "seals"));
   return store;
 }

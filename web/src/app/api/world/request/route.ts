@@ -1,4 +1,4 @@
-import { records } from "@/lib/records";
+import { records, type SealRecord } from "@/lib/records";
 import { actingAccount } from "@/lib/signin";
 import { isSealHash, requestContext, worldConfig } from "@/lib/world";
 
@@ -12,7 +12,12 @@ export async function POST(request: Request) {
   if (!isSealHash(body?.hash)) {
     return Response.json({ state: "refused", reason: "hash" }, { status: 400 });
   }
-  const kept = await records().get(body.hash);
+  let kept: SealRecord | null;
+  try {
+    kept = await records().get(body.hash);
+  } catch {
+    return Response.json({ state: "refused", reason: "store" }, { status: 503 });
+  }
   if (kept) {
     return Response.json({
       state: "authorised",

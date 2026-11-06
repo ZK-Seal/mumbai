@@ -12,6 +12,11 @@ function verified(record: SealRecord) {
   });
 }
 
+/** The record of seals could not be read or written; nothing is said about this seal. */
+function storeFailed() {
+  return Response.json({ state: "refused", reason: "store" }, { status: 503 });
+}
+
 /**
  * Finishes one authorisation. The proof must be tied to this seal's hash, and World must
  * accept it. Every answer is a word from a short fixed list. The first authorisation of a seal
@@ -29,7 +34,12 @@ export async function POST(request: Request) {
   if (!config) {
     return Response.json({ state: "refused", reason: "not-set-up" }, { status: 503 });
   }
-  const kept = await records().get(body.hash);
+  let kept: SealRecord | null;
+  try {
+    kept = await records().get(body.hash);
+  } catch {
+    return storeFailed();
+  }
   if (kept) return verified(kept);
   const account = await actingAccount();
   if (account === false) {
@@ -42,12 +52,17 @@ export async function POST(request: Request) {
   if (!(await worldAccepts(body.result, config))) {
     return Response.json({ state: "refused", reason: "not-verified" }, { status: 422 });
   }
-  const record = await records().put({
-    hash: body.hash,
-    pass: nullifier,
-    credential: config.credential,
-    account,
-    at: new Date().toISOString(),
-  });
+  let record: SealRecord;
+  try {
+    record = await records().put({
+      hash: body.hash,
+      pass: nullifier,
+      credential: config.credential,
+      account,
+      at: new Date().toISOString(),
+    });
+  } catch {
+    return storeFailed();
+  }
   return verified(record);
 }

@@ -9,11 +9,13 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@arkiv-network/sdk": "^1.0.1",
     "@worldcoin/idkit": "^4.6.0",
     "jose": "^6.2.15",
     "next": "16.4.5",
     "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.0",
+    "viem": "^2.57.16"
   },
   "devDependencies": {
     "@types/node": "^20",
