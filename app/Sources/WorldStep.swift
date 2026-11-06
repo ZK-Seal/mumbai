@@ -11,7 +11,7 @@ final class WorldStep {
         case notAuthorised
         /// World's own error word, from its fixed list.
         case worldFailed(String)
-        /// The web side does not accept this person's ticket for this event.
+        /// The web side does not accept this person's badge for this event.
         case noEntry
         /// The web side could not be read, or the World app could not be opened, so the sheet takes over.
         case useSheet
@@ -93,7 +93,7 @@ final class WorldStep {
 
     /// With the person's session, the web side files this photo under their name. Without one, the photo stays unnamed.
     /// The ticket says the service checked this hash. It goes both in the body and as a header.
-    /// `entry` is the SHA-256 of the person's scanned ticket for this event.
+    /// `entry` is the SHA-256 of the person's scanned badge for this event.
     func run(base: String, hash: String, event: String?, session: String?, ticket: String?, entry: String?) async -> Outcome {
         guard let start: Start = await post(base, "/api/world/request", body(hash: hash, event: event, ticket: ticket, entry: entry), limit: 15, ticket: ticket) else { return .useSheet }
         // This answer carries the seal's record itself.

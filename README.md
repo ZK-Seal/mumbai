@@ -29,9 +29,10 @@ Once, before the first authorising, and at any time from Settings, the app asks 
 The registrar is our server, not a contract. The name goes on a public chain and stays there, and it links that person's photos across events.
 When the web side is making an ENS name for a picture, the result shows "name being created" under "Authorised", then the name. If it is still not done after about 90 s, the app asks once more with the same token.
 
-## A ticket for an event
+## A badge for an event
 
-If an event is set, the app scans a ticket's QR code with the camera before the first photo goes to that event. It never keeps or logs the code. It sends only the code's SHA-256 to the web side, as `entry`. The web side can check it against our own list. That shows a ticket is on our list, not that ETHGlobal issued it.
+If an event is set, the app scans an ETHGlobal badge's QR code with the camera before the first photo goes to that event. It accepts only an https link on ethglobal.com. It never opens, shows, keeps or logs that link. It sends only the link's SHA-256 to the web side, as `entry`. The web side can check it against our own list.
+That shows a badge's link is on our list. It does not show that ETHGlobal issued the badge, or that the person holds it: a badge is worn in public, and anyone who photographs it can copy the link.
 
 ## The picture after authorising
 

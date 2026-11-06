@@ -38,7 +38,7 @@ struct ResultScreen: View {
     @AppStorage("userName") private var userName = ""
     @AppStorage("userSession") private var userSession = ""
     @AppStorage("nameStepShown") private var nameStepShown = false
-    /// The SHA-256 of the ticket scanned for one event. The code itself is never kept.
+    /// The SHA-256 of the badge scanned for one event. The code itself is never kept.
     @AppStorage("entryHash") private var entryHash = ""
     @AppStorage("entryEvent") private var entryEvent = ""
     @State private var showScan = false
@@ -157,7 +157,7 @@ struct ResultScreen: View {
                 if entryNow != nil { authorise(link) }
             }
         }) {
-            TicketScanScreen(onHash: { hash in
+            BadgeScanScreen(onHash: { hash in
                 entryHash = hash
                 entryEvent = AuthoriseLink.event(fromSettings: event) ?? ""
                 showScan = false
@@ -177,13 +177,13 @@ struct ResultScreen: View {
         }
     }
 
-    /// The ticket's hash for the event now set, if one was scanned.
+    /// The badge's hash for the event now set, if one was scanned.
     private var entryNow: String? {
         guard let slug = AuthoriseLink.event(fromSettings: event), entryEvent == slug, !entryHash.isEmpty else { return nil }
         return entryHash
     }
 
-    /// A photo going to an event needs a ticket scanned for it first. Closing the camera goes back to the button.
+    /// A photo going to an event needs a badge scanned for it first. Closing the camera goes back to the button.
     private func goOn(_ link: URL) {
         guard AuthoriseLink.event(fromSettings: event) != nil, entryNow == nil else {
             authorise(link)

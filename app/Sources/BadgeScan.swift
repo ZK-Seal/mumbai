@@ -2,20 +2,39 @@ import AVFoundation
 import CryptoKit
 import SwiftUI
 
-/// Reads a ticket's QR code with the camera. The code is plain unknown text.
-/// It is never kept, shown or logged. This screen passes on only its SHA-256.
-struct TicketScanScreen: View {
+/// Reads an ETHGlobal badge's QR code with the camera. The code is plain unknown text, and it leads to a person's real name.
+/// It is never opened, kept, shown or logged. This screen passes on only its SHA-256.
+struct BadgeScanScreen: View {
     let onHash: (String) -> Void
     let onClose: () -> Void
 
     @State private var allowed: Bool?
+    @State private var refused = false
 
     var body: some View {
         NavigationStack {
             Group {
                 if allowed == true {
-                    CodeCamera { code in onHash(Self.hash(of: code)) }
-                        .ignoresSafeArea(edges: .bottom)
+                    CodeCamera { code in
+                        guard Self.isBadge(code) else {
+                            refused = true
+                            return false
+                        }
+                        onHash(Self.hash(of: code))
+                        return true
+                    }
+                    .ignoresSafeArea(edges: .bottom)
+                    .overlay(alignment: .bottom) {
+                        if refused {
+                            Text("This is not an ETHGlobal badge.")
+                                .font(Theme.text(15, .medium))
+                                .foregroundStyle(Theme.refused)
+                                .padding(12)
+                                .background(Theme.refusedBackground, in: RoundedRectangle(cornerRadius: 12))
+                                .padding(16)
+                                .accessibilityIdentifier("notABadge")
+                        }
+                    }
                 } else if allowed == false {
                     Text("The camera is not available.")
                         .font(Theme.text(15))
@@ -26,7 +45,7 @@ struct TicketScanScreen: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Theme.background)
-            .navigationTitle("Scan your ticket")
+            .navigationTitle("Scan your badge")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -40,26 +59,34 @@ struct TicketScanScreen: View {
         .task { allowed = await AVCaptureDevice.requestAccess(for: .video) }
     }
 
+    /// Only an https link on ethglobal.com or under it, with no user, password or port.
+    private static func isBadge(_ code: String) -> Bool {
+        guard let parts = URLComponents(string: code), parts.scheme?.lowercased() == "https",
+              parts.user == nil, parts.password == nil, parts.port == nil,
+              let host = parts.host?.lowercased() else { return false }
+        return host == "ethglobal.com" || host.hasSuffix(".ethglobal.com")
+    }
+
     /// Lowercase hex of the SHA-256 of the code's exact text, as UTF-8.
     private static func hash(of code: String) -> String {
         SHA256.hash(data: Data(code.utf8)).map { String(format: "%02x", $0) }.joined()
     }
 }
 
-/// The camera's picture, and the first QR code it sees.
+/// The camera's picture. It hands on each QR code it sees, until one is taken.
 private struct CodeCamera: UIViewControllerRepresentable {
-    let onCode: (String) -> Void
+    let onCode: (String) -> Bool
 
     func makeUIViewController(context: Context) -> Controller { Controller(onCode: onCode) }
     func updateUIViewController(_ controller: Controller, context: Context) {}
 
     final class Controller: UIViewController, AVCaptureMetadataOutputObjectsDelegate {
         private let session = AVCaptureSession()
-        private let onCode: (String) -> Void
+        private let onCode: (String) -> Bool
         private var preview: AVCaptureVideoPreviewLayer?
         private var done = false
 
-        init(onCode: @escaping (String) -> Void) {
+        init(onCode: @escaping (String) -> Bool) {
             self.onCode = onCode
             super.init(nibName: nil, bundle: nil)
         }
@@ -99,8 +126,7 @@ private struct CodeCamera: UIViewControllerRepresentable {
 
         func metadataOutput(_ output: AVCaptureMetadataOutput, didOutput objects: [AVMetadataObject], from connection: AVCaptureConnection) {
             guard !done, let code = (objects.first as? AVMetadataMachineReadableCodeObject)?.stringValue, !code.isEmpty else { return }
-            done = true
-            onCode(code)
+            done = onCode(code)
         }
     }
 }
