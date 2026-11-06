@@ -46,6 +46,13 @@ enum AuthoriseLink {
         return parts.url
     }
 
+    /// The web side's join page, in a sheet, for when the World app cannot be opened from here.
+    static func joinURL(base: String, label: String) -> URL? {
+        guard var parts = place(base: base, path: "/join") else { return nil }
+        parts.queryItems = [URLQueryItem(name: "from", value: "app"), URLQueryItem(name: "label", value: label)]
+        return parts.url
+    }
+
     /// Whether the page's way back says this very seal was authorised: blankdemo://authorised?hash=<hash>&state=authorised
     /// This alone is never believed.
     static func saysAuthorised(_ back: URL?, hash: String) -> Bool {

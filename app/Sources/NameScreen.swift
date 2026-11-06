@@ -12,6 +12,7 @@ struct NameScreen: View {
     @State private var working = false
     @State private var line: String?
     @State private var world = WorldStep()
+    @State private var sheet = AuthoriseSheet()
 
     var body: some View {
         Form {
@@ -45,10 +46,7 @@ struct NameScreen: View {
                         .textSelection(.enabled)
                         .accessibilityIdentifier("savedName")
                     if userNameState == "pending" {
-                        Text("pending")
-                            .foregroundStyle(Theme.muted)
-                    } else if userNameState == "failed" {
-                        Text("The name could not be made.")
+                        Text("name being created")
                             .foregroundStyle(Theme.muted)
                     }
                     if let onClose {
@@ -97,9 +95,27 @@ struct NameScreen: View {
                 line = "World did not finish: \(word)"
             case .unavailable:
                 line = "Names are not available now."
+            case .useSheet:
+                await joinInSheet(base: base, label: wanted)
             }
             working = false
         }
+    }
+
+    /// The page's way back is only a hint. The name counts only when the web side lists it.
+    private func joinInSheet(base: String, label wanted: String) async {
+        guard let link = AuthoriseLink.joinURL(base: base, label: wanted) else {
+            line = "Names are not available now."
+            return
+        }
+        let back = await sheet.open(link)
+        guard let joined = Names.joinedLabel(back), let found = await Names.listing(base: base, label: joined) else {
+            line = Names.sentence(forRefusal: "")
+            return
+        }
+        userNameState = found.state
+        userName = found.name
+        label = ""
     }
 
     /// Asks until the name is finished. It takes a while on the chain, so this goes on only while the screen is open.
@@ -107,8 +123,8 @@ struct NameScreen: View {
         guard userNameState == "pending", let label = Names.label(of: userName) else { return }
         let base = AuthoriseLink.base(fromSettings: webAddress)
         for _ in 0..<60 {
-            if let state = await Names.nameState(base: base, label: label), state != "pending" {
-                userNameState = state
+            if let found = await Names.listing(base: base, label: label), found.state != "pending" {
+                userNameState = found.state
                 return
             }
             try? await Task.sleep(nanoseconds: 5_000_000_000)

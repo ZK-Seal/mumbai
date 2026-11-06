@@ -75,14 +75,18 @@ struct ResultScreen: View {
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 4)
                             .accessibilityIdentifier("authorised")
-                        if let imageName, imageName.state != "failed" {
-                            Text(imageName.name)
+                        if imageName?.state == "done", let name = imageName?.name {
+                            Text(name)
                                 .font(Theme.text(14))
-                                .foregroundStyle(imageName.state == "done" ? Color.primary : Theme.muted)
                                 .multilineTextAlignment(.center)
                                 .textSelection(.enabled)
                                 .frame(maxWidth: .infinity)
                                 .accessibilityIdentifier("imageName")
+                        } else if imageName?.state == "pending" {
+                            Text("name being created")
+                                .font(Theme.text(14))
+                                .foregroundStyle(Theme.muted)
+                                .frame(maxWidth: .infinity)
                         }
                         switch sending {
                         case .none:
@@ -211,15 +215,23 @@ struct ResultScreen: View {
         }
     }
 
-    /// Asks for the image's ENS name until it is finished. It takes a while on the chain. Nothing shows until there is one.
+    /// Asks for the image's ENS name until it is finished. It takes a while on the chain.
+    /// A slow upload can use up the web side's time before the name is sent, so after about 90 s it asks for the name again.
     private func watchImage() {
         imageWatch?.cancel()
         let base = AuthoriseLink.base(fromSettings: webAddress)
         imageWatch = Task {
-            for _ in 0..<40 {
+            var pendingSince: Date?
+            for _ in 0..<60 {
                 if let found = await Names.image(base: base, hash: result.hash) {
                     imageName = found
                     if found.state != "pending" { return }
+                    let since = pendingSince ?? Date()
+                    pendingSince = since
+                    if Date().timeIntervalSince(since) >= 90, let pictureToken {
+                        await PictureUpload.askForName(base: base, hash: result.hash, token: pictureToken)
+                        pendingSince = Date()
+                    }
                 }
                 try? await Task.sleep(nanoseconds: 5_000_000_000)
                 if Task.isCancelled { return }

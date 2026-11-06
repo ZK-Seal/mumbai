@@ -21,8 +21,10 @@ final class WorldStep {
         case refused(String)
         /// World's own error word, from its fixed list.
         case worldFailed(String)
-        /// The routes are not there, the answer could not be read, or the World app could not be opened.
+        /// The routes are not there, or the answer could not be read.
         case unavailable
+        /// The web side is ready, but the World app could not be opened from here, so its join page takes over.
+        case useSheet
     }
 
     private enum Proof {
@@ -117,7 +119,8 @@ final class WorldStep {
         switch await prove(start, signal: signal) {
         case .json(let made): json = made
         case .worldFailed(let word): return .worldFailed(word)
-        case .cannotStart, .unreadable: return .unavailable
+        case .cannotStart: return .useSheet
+        case .unreadable: return .unavailable
         }
         let answer: Joined? = await post(base, "/api/user/register", "{\"label\":\"\(label)\",\"result\":\(json)}", limit: 60)
         guard let answer else { return .unavailable }

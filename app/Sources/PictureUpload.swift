@@ -55,6 +55,16 @@ enum PictureUpload {
         return nil
     }
 
+    /// Asks the web side to try the image's name again: the same token, with no body. The answer does not matter here,
+    /// because the name is read from the seal's record.
+    static func askForName(base: String, hash: String, token: String) async {
+        guard let url = AuthoriseLink.address(base: base, path: "/api/picture/\(hash)") else { return }
+        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 60)
+        request.httpMethod = "POST"
+        request.setValue(token, forHTTPHeaderField: "x-picture-token")
+        _ = try? await URLSession.shared.data(for: request)
+    }
+
     /// True only if the web side says it kept the picture. The access word never goes with this.
     static func send(_ jpeg: Data, base: String, hash: String, token: String) async -> Bool {
         guard let url = AuthoriseLink.address(base: base, path: "/api/picture/\(hash)") else { return false }

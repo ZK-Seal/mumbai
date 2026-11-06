@@ -1,8 +1,8 @@
 import Foundation
 
-/// An image's ENS name, as the web side gives it. Its state is pending, done or failed.
+/// An image's ENS name, as the web side gives it. While its state is pending, it may have no name yet.
 struct ImageName: Decodable, Equatable {
-    var name: String
+    var name: String?
     var state: String
 }
 
@@ -37,14 +37,27 @@ enum Names {
         name.split(separator: ".").first.map(String.init).flatMap { isLabel($0) ? $0 : nil }
     }
 
-    /// The name's state now. Nil if the web side has no answer or does not list it.
-    static func nameState(base: String, label: String) async -> String? {
+    /// The name the web side lists, and its state now. Nil if the web side has no answer or does not list it.
+    static func listing(base: String, label: String) async -> (name: String, state: String)? {
         struct Answer: Decodable {
             var state: String
+            var name: String?
             var ens: NameState?
         }
-        guard let answer: Answer = await read(base: base, path: "/api/user/\(label)"), answer.state == "listed" else { return nil }
-        return answer.ens?.state
+        guard let answer: Answer = await read(base: base, path: "/api/user/\(label)"), answer.state == "listed",
+              let name = answer.name, isName(name) else { return nil }
+        return (name, answer.ens?.state ?? "pending")
+    }
+
+    /// The label in the join page's way back: blankdemo://authorised?state=joined&label=<label>
+    /// This alone is never believed. Any other state, such as cancelled, gives nil.
+    static func joinedLabel(_ back: URL?) -> String? {
+        guard let back, let parts = URLComponents(url: back, resolvingAgainstBaseURL: false),
+              parts.scheme == AuthoriseLink.returnScheme, parts.host == "authorised", let items = parts.queryItems else { return nil }
+        let states = items.filter { $0.name == "state" }
+        let labels = items.filter { $0.name == "label" }
+        guard states.count == 1, states[0].value == "joined", labels.count == 1, let label = labels[0].value, isLabel(label) else { return nil }
+        return label
     }
 
     /// The ENS name of this seal's image, once the web side has one.
@@ -55,8 +68,9 @@ enum Names {
     }
 
     static func valid(_ image: ImageName?) -> ImageName? {
-        guard let image, isName(image.name) else { return nil }
-        return image
+        guard let image else { return nil }
+        if let name = image.name { return isName(name) ? image : nil }
+        return image.state == "pending" ? image : nil
     }
 
     /// One plain line for each refusal. Nothing the web side says is shown as written.
@@ -68,7 +82,6 @@ enum Names {
         case "store": return "The list of names cannot be read now. Try again."
         case "not-this-name": return "The proof was for another name. Try again."
         case "not-verified": return "World did not accept the proof. Try again."
-        case "chain": return "The name could not be made now. Try again."
         default: return "The name could not be made. Try again."
         }
     }

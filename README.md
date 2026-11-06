@@ -25,9 +25,9 @@ The page comes back through a `blankdemo://` link, and the app does not trust th
 
 ## Your name
 
-Once, before the first authorising, and at any time from Settings, the app asks for a short name of 3 to 20 lowercase letters, digits or hyphens. The person proves in the World app that they are one human, and the web side checks that and makes an ENS name for them, in the background. The app keeps the name on the phone and shows "pending" until the web side says it is done.
+Once, before the first authorising, and at any time from Settings, the app asks for a short name of 3 to 20 lowercase letters, digits or hyphens. The person proves in the World app that they are one human, and the web side checks that and makes an ENS name for them, in the background. The app keeps the name on the phone and shows "name being created" until the web side says it is done. If the World app cannot be opened from here, the app opens the web side's join page in a sheet, and believes the page's way back only when the web side then lists the name.
 The registrar is our server, not a contract. The name goes on a public chain and stays there, and it links that person's photos across events.
-If the web side has made an ENS name for a picture, the result shows it under "Authorised".
+When the web side is making an ENS name for a picture, the result shows "name being created" under "Authorised", then the name. If it is still not done after about 90 s, the app asks once more with the same token.
 
 ## The picture after authorising
 
