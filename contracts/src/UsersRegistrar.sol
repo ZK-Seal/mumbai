@@ -39,6 +39,8 @@ contract UsersRegistrar is Admin, ReentrancyGuard {
     mapping(address owner => string label) public labelOf;
     mapping(uint256 pass => address owner) public ownerOfPass;
 
+    /// @dev The registry and the check need no code yet. So a server can send all its deploys in one
+    ///      wave. Until they exist, `register` reverts.
     constructor(
         address ownerWallet_,
         IEnsRegistry registry_,
@@ -47,12 +49,16 @@ contract UsersRegistrar is Admin, ReentrancyGuard {
     )
         Admin(ownerWallet_)
     {
-        if (address(registry_) == address(0) || resolver_ == address(0)) revert ZeroAddress();
+        bool anyZero = address(registry_) == address(0) || resolver_ == address(0)
+            || address(personCheck_) == address(0);
+        if (anyZero) revert ZeroAddress();
         registry = registry_;
         resolver = resolver_;
-        _setPersonCheck(personCheck_);
+        personCheck = personCheck_;
+        emit PersonCheckSet(address(personCheck_));
     }
 
+    /// @param pass The person's World nullifier from the join action.
     /// @dev Our records are written before the registry is called, because the registry calls back
     ///      a contract owner. The guard also stops a second name being made during that call back.
     function register(string calldata label, address owner, uint256 pass, bytes calldata proof)
@@ -82,10 +88,6 @@ contract UsersRegistrar is Admin, ReentrancyGuard {
     }
 
     function setPersonCheck(IPersonCheck personCheck_) external onlyAdmin {
-        _setPersonCheck(personCheck_);
-    }
-
-    function _setPersonCheck(IPersonCheck personCheck_) private {
         if (address(personCheck_).code.length == 0) revert NotAContract(address(personCheck_));
         personCheck = personCheck_;
         emit PersonCheckSet(address(personCheck_));

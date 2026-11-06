@@ -16,6 +16,9 @@ import {UsersRegistrar} from "./UsersRegistrar.sol";
 ///        registry roles decide that, and anyone can read them.
 ///      - It trusts `sealCheck`. Today that is a key held by our server. No contract can check a
 ///        zkSeal proof today.
+///      - Each photo has its own World proof, and that proof's nullifier is not the person's pass.
+///        So nothing on chain ties a photo to a person. The tie is our server's session, and this
+///        contract only sees the server's signature over the owner and the seal.
 ///      - The sender only pays gas, so a server may relay. The check is on the owner's data.
 ///      - `eventRegistry` is whatever the check approved. There is no list of events here.
 ///      - Records (contenthash, seal and by texts) are written on the resolver by the server.
@@ -41,6 +44,8 @@ contract EventsRegistrar is Admin, ReentrancyGuard {
     mapping(address eventRegistry => mapping(string label => bytes32 seal)) public sealOf;
     mapping(bytes32 seal => bool used) public usedSeal;
 
+    /// @dev The other contracts need no code yet. So a server can send all its deploys in one wave.
+    ///      Until they exist, `registerImage` reverts.
     constructor(
         address ownerWallet_,
         UsersRegistrar users_,
@@ -49,10 +54,13 @@ contract EventsRegistrar is Admin, ReentrancyGuard {
     )
         Admin(ownerWallet_)
     {
-        if (address(users_) == address(0) || resolver_ == address(0)) revert ZeroAddress();
+        bool anyZero = address(users_) == address(0) || resolver_ == address(0)
+            || address(sealCheck_) == address(0);
+        if (anyZero) revert ZeroAddress();
         users = users_;
         resolver = resolver_;
-        _setSealCheck(sealCheck_);
+        sealCheck = sealCheck_;
+        emit SealCheckSet(address(sealCheck_));
     }
 
     /// @dev Our records are written before the registry is called, because the registry calls back
@@ -84,10 +92,6 @@ contract EventsRegistrar is Admin, ReentrancyGuard {
     }
 
     function setSealCheck(ISealCheck sealCheck_) external onlyAdmin {
-        _setSealCheck(sealCheck_);
-    }
-
-    function _setSealCheck(ISealCheck sealCheck_) private {
         if (address(sealCheck_).code.length == 0) revert NotAContract(address(sealCheck_));
         sealCheck = sealCheck_;
         emit SealCheckSet(address(sealCheck_));

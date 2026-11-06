@@ -6,7 +6,8 @@ import {ISealCheck} from "./ISealCheck.sol";
 
 /// @notice The seal check in use: a signature by a key held by our server.
 /// @dev The contract does not see or check a zkSeal proof, and no contract can today. It only sees
-///      that the server says it checked one.
+///      that the server says it checked one, and checked the photo's World proof, and that its
+///      session ties that proof to this owner.
 contract AttestedSealCheck is AttestedCheck, ISealCheck {
     constructor(address ownerWallet_, address attester_) AttestedCheck(ownerWallet_, attester_) {}
 

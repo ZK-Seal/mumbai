@@ -8,6 +8,8 @@ pragma solidity 0.8.29;
 ///      The target is a contract named WrappedProofSealCheck. It would check a small proof wrapped
 ///      around the zkSeal proof. That wrapped proof does not exist yet, so neither does the
 ///      contract. This interface is all there is of it.
+///      The signature also stands for the tie between the photo and the person. Each photo has its
+///      own World proof, and our server's session ties that proof to a named person.
 ///      `view` makes the call a static call, so a check cannot change state or call back to write.
 interface ISealCheck {
     /// @param owner The address that gets the image name.

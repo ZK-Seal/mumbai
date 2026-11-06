@@ -5,7 +5,7 @@ import {IPersonCheck} from "./IPersonCheck.sol";
 
 /// @notice World's router on Ethereum. It reverts when a proof is bad.
 /// @dev Its deployed ABI says nonpayable, and World's docs say view. Its source writes nothing on
-///      this path, so we call it as view. That has never been run with a good proof.
+///      this path, so we call it as view. This contract has never run with a good proof.
 interface IWorldRouter {
     function verifyProof(
         uint256 root,
@@ -21,12 +21,14 @@ interface IWorldRouter {
 
 /// @notice A person check that asks World's router on chain. WRITTEN, NOT IN USE.
 /// @dev No good proof has ever passed through this contract. Its limits:
-///      - It needs production identities. A sandbox or staging root is not in World's mainnet tree,
-///        so the router refuses it.
-///      - The router takes World ID 3.0 proofs from the Orb group only, and World's docs mark that
-///        path as deprecated. World ID 4.0's on-chain check is listed for World Chain and Arc, not
-///        for Ethereum. The proofs our server gets today would need converting or another chain.
-///      - The app must sign `signalHash(owner, label)`. The signal it uses today holds the label only.
+///      - On mainnet it needs production identities. A sandbox or staging root is not in World's
+///        mainnet tree, so the router refuses it.
+///      - The router takes World ID 3.0 proofs from the Orb group only. World's docs call these
+///        legacy. World ID 4.0's on-chain check is not on Ethereum. So it does not take the proofs
+///        our server gets today.
+///      - A proof must be made over `signalHash(owner, label)`. Today's signal holds the label only.
+///      - The owner must be known before the proof. Our server makes the owner's key from the pass,
+///        and the pass comes out of the proof. That order has to change first.
 contract WorldPersonCheck is IPersonCheck {
     uint256 public constant ORB_GROUP = 1;
 

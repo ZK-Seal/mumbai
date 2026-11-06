@@ -3,8 +3,6 @@ pragma solidity 0.8.29;
 
 import {Test} from "forge-std/Test.sol";
 
-import {AttestedPersonCheck} from "../src/AttestedPersonCheck.sol";
-import {AttestedSealCheck} from "../src/AttestedSealCheck.sol";
 import {IEnsRegistry} from "../src/IEnsRegistry.sol";
 
 bytes4 constant ERC1155_ACCEPTED = 0xf23a6e61;
@@ -84,6 +82,9 @@ contract CallbackOwner {
     }
 }
 
+/// @notice A contract with no ERC-1155 hook. The real registry refuses to mint to it.
+contract NoHookOwner {}
+
 /// @notice An event registry that tries one more call during `register`, and keeps the answer.
 contract CallbackRegistry is IEnsRegistry {
     address public target;
@@ -159,6 +160,10 @@ contract MockRouter {
 
 /// @notice Test-only keys and signing. No key here holds anything.
 abstract contract SignHelp is Test {
+    /// @dev The order of secp256k1, for making the other form of a signature.
+    uint256 internal constant CURVE_ORDER =
+        0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141;
+
     uint256 internal attesterKey;
     address internal attester;
     uint256 internal strangerKey;
@@ -173,6 +178,24 @@ abstract contract SignHelp is Test {
             keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", messageHash));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(key, digest);
         return abi.encodePacked(r, s, v);
+    }
+
+    /// @dev The same signer, the same message, the other valid `s`. Plain ecrecover accepts it.
+    function _otherForm(bytes memory signature) internal pure returns (bytes memory) {
+        (bytes32 r, bytes32 s, uint8 v) = _parts(signature);
+        return abi.encodePacked(r, bytes32(CURVE_ORDER - uint256(s)), v == 27 ? uint8(28) : uint8(27));
+    }
+
+    function _parts(bytes memory signature)
+        internal
+        pure
+        returns (bytes32 r, bytes32 s, uint8 v)
+    {
+        assembly ("memory-safe") {
+            r := mload(add(signature, 32))
+            s := mload(add(signature, 64))
+            v := byte(0, mload(add(signature, 96)))
+        }
     }
 
     /// @dev Written out here, not read from the contract, so a change in the contract gets caught.
@@ -208,6 +231,3 @@ abstract contract SignHelp is Test {
         );
     }
 }
-
-// Silence unused-import warnings for the types the test files import through here.
-type PersonCheckAlias is address;
