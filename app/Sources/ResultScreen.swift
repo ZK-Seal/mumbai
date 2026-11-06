@@ -38,6 +38,11 @@ struct ResultScreen: View {
     @AppStorage("userName") private var userName = ""
     @AppStorage("userSession") private var userSession = ""
     @AppStorage("nameStepShown") private var nameStepShown = false
+    /// The SHA-256 of the ticket scanned for one event. The code itself is never kept.
+    @AppStorage("entryHash") private var entryHash = ""
+    @AppStorage("entryEvent") private var entryEvent = ""
+    @State private var showScan = false
+    @State private var afterScan: URL?
     @State private var showNameStep = false
     @State private var afterName: URL?
     @State private var imageName: ImageName?
@@ -146,10 +151,22 @@ struct ResultScreen: View {
             world.stop()
             imageWatch?.cancel()
         }
+        .sheet(isPresented: $showScan, onDismiss: {
+            if let link = afterScan {
+                afterScan = nil
+                if entryNow != nil { authorise(link) }
+            }
+        }) {
+            TicketScanScreen(onHash: { hash in
+                entryHash = hash
+                entryEvent = AuthoriseLink.event(fromSettings: event) ?? ""
+                showScan = false
+            }, onClose: { showScan = false })
+        }
         .sheet(isPresented: $showNameStep, onDismiss: {
             if let link = afterName {
                 afterName = nil
-                authorise(link)
+                goOn(link)
             }
         }) {
             NavigationStack {
@@ -160,10 +177,26 @@ struct ResultScreen: View {
         }
     }
 
+    /// The ticket's hash for the event now set, if one was scanned.
+    private var entryNow: String? {
+        guard let slug = AuthoriseLink.event(fromSettings: event), entryEvent == slug, !entryHash.isEmpty else { return nil }
+        return entryHash
+    }
+
+    /// A photo going to an event needs a ticket scanned for it first. Closing the camera goes back to the button.
+    private func goOn(_ link: URL) {
+        guard AuthoriseLink.event(fromSettings: event) != nil, entryNow == nil else {
+            authorise(link)
+            return
+        }
+        afterScan = link
+        showScan = true
+    }
+
     /// The name step comes once, before the first authorising, if no name is saved. Closing it goes on to authorise.
     private func pressAuthorise(_ link: URL) {
         guard userName.isEmpty, !nameStepShown else {
-            authorise(link)
+            goOn(link)
             return
         }
         nameStepShown = true
@@ -180,7 +213,7 @@ struct ResultScreen: View {
         let base = AuthoriseLink.base(fromSettings: webAddress)
         Task {
             switch await world.run(base: base, hash: result.hash, event: AuthoriseLink.event(fromSettings: event),
-                                     session: Names.isSession(userSession) ? userSession : nil, ticket: result.ticket) {
+                                     session: Names.isSession(userSession) ? userSession : nil, ticket: result.ticket, entry: entryNow) {
             case .authorised(let token, let image):
                 authorising = .authorised
                 imageName = image
@@ -191,6 +224,11 @@ struct ResultScreen: View {
                 authorising = .notAuthorised
             case .worldFailed(let word):
                 failureWord = word
+                authorising = .notAuthorised
+            case .noEntry:
+                // The next press scans again.
+                entryHash = ""
+                failureWord = "no-entry"
                 authorising = .notAuthorised
             case .useSheet:
                 guard AuthoriseLink.sheetCanOpen(base: base) else {

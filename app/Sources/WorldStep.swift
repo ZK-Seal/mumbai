@@ -11,6 +11,8 @@ final class WorldStep {
         case notAuthorised
         /// World's own error word, from its fixed list.
         case worldFailed(String)
+        /// The web side does not accept this person's ticket for this event.
+        case noEntry
         /// The web side could not be read, or the World app could not be opened, so the sheet takes over.
         case useSheet
     }
@@ -57,14 +59,16 @@ final class WorldStep {
         var state: String
         var picture_token: String?
         var image: ImageName?
+        var reason: String?
 
         /// Only the state is needed. An extra field in another form must not undo "verified".
         init(from decoder: Decoder) throws {
-            enum Keys: String, CodingKey { case state, picture_token, image }
+            enum Keys: String, CodingKey { case state, picture_token, image, reason }
             let box = try decoder.container(keyedBy: Keys.self)
             state = try box.decode(String.self, forKey: .state)
             picture_token = try? box.decodeIfPresent(String.self, forKey: .picture_token)
             image = try? box.decodeIfPresent(ImageName.self, forKey: .image)
+            reason = try? box.decodeIfPresent(String.self, forKey: .reason)
         }
 
         /// Nil unless it has its fixed form, so nothing else can reach a header.
@@ -89,10 +93,12 @@ final class WorldStep {
 
     /// With the person's session, the web side files this photo under their name. Without one, the photo stays unnamed.
     /// The ticket says the service checked this hash. It goes both in the body and as a header.
-    func run(base: String, hash: String, event: String?, session: String?, ticket: String?) async -> Outcome {
-        guard let start: Start = await post(base, "/api/world/request", body(hash: hash, event: event, ticket: ticket), limit: 15, ticket: ticket) else { return .useSheet }
+    /// `entry` is the SHA-256 of the person's scanned ticket for this event.
+    func run(base: String, hash: String, event: String?, session: String?, ticket: String?, entry: String?) async -> Outcome {
+        guard let start: Start = await post(base, "/api/world/request", body(hash: hash, event: event, ticket: ticket, entry: entry), limit: 15, ticket: ticket) else { return .useSheet }
         // This answer carries the seal's record itself.
         if start.state == "authorised" { return .authorised(pictureToken: nil, image: nil) }
+        if start.reason == "no-entry" { return .noEntry }
         guard start.state == "ready", start.signal == hash else { return .notAuthorised }
         let json: String
         switch await prove(start, signal: hash) {
@@ -101,7 +107,8 @@ final class WorldStep {
         case .cannotStart: return .useSheet
         case .unreadable: return .notAuthorised
         }
-        let finish: Finish? = await post(base, "/api/world/verify", body(hash: hash, event: event, result: json, session: session, ticket: ticket), limit: 60, ticket: ticket)
+        let finish: Finish? = await post(base, "/api/world/verify", body(hash: hash, event: event, result: json, session: session, ticket: ticket, entry: entry), limit: 60, ticket: ticket)
+        if finish?.reason == "no-entry" { return .noEntry }
         // This answer is trusted as it is. A second call could miss a fresh record.
         if let finish { return finish.state == "verified" ? .authorised(pictureToken: finish.token, image: Names.valid(finish.image)) : .notAuthorised }
         // With no answer at all, the record may still have been kept.
@@ -179,12 +186,13 @@ final class WorldStep {
     }
 
     /// The hash and event have a fixed form, so they need no escaping. The result stays exactly as the package wrote it.
-    private func body(hash: String, event: String?, result: String? = nil, session: String? = nil, ticket: String? = nil) -> String {
+    private func body(hash: String, event: String?, result: String? = nil, session: String? = nil, ticket: String? = nil, entry: String? = nil) -> String {
         var parts = ["\"hash\":\"\(hash)\""]
         if let event { parts.append("\"event\":\"\(event)\"") }
         if let result { parts.append("\"result\":\(result)") }
         if let session { parts.append("\"session\":\"\(session)\"") }
         if let ticket { parts.append("\"ticket\":\"\(ticket)\"") }
+        if let entry { parts.append("\"entry\":\"\(entry)\"") }
         return "{" + parts.joined(separator: ",") + "}"
     }
 

@@ -10,7 +10,7 @@ settings:
     INFOPLIST_KEY_UILaunchScreen_Generation: YES
     INFOPLIST_KEY_CFBundleDisplayName: zkSeal
     INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
-    INFOPLIST_KEY_NSCameraUsageDescription: "The app takes the photo you choose to send."
+    INFOPLIST_KEY_NSCameraUsageDescription: "The app takes the photo you choose to send, and reads a ticket's QR code."
     ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     PRODUCT_BUNDLE_IDENTIFIER: blank.demo.app
     MARKETING_VERSION: "0.1"
