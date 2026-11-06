@@ -16,7 +16,7 @@ struct JobResult {
     }
 }
 
-/// The result: the picture with its yellow face. It has no save or share button.
+/// The result: the picture with its cover. It has no save or share button.
 struct ResultScreen: View {
     let client: ServiceClient
     let jobID: String
@@ -28,6 +28,7 @@ struct ResultScreen: View {
     let onDone: () -> Void
 
     @AppStorage("webAddress") private var webAddress = ""
+    @AppStorage("cover") private var cover = Cover.mask
     @Environment(\.openURL) private var openURL
     @State private var picture: UIImage?
     @State private var problem = false
@@ -80,9 +81,9 @@ struct ResultScreen: View {
             return
         }
         // Drawn away from the screen's own thread, so a large picture does not stop the screen.
-        let (areas, size) = (boxes, cell)
+        let (areas, size, chosen) = (boxes, cell, cover)
         let shown = await Task.detached(priority: .userInitiated) {
-            AreaPreview.face(image, boxes: areas, cell: size)
+            AreaPreview.covered(image, boxes: areas, cell: size, cover: chosen)
         }.value
         if let shown {
             picture = shown

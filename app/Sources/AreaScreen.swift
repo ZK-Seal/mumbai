@@ -6,6 +6,7 @@ struct AreaScreen: View {
     @AppStorage("serviceAddress") private var serviceAddress = ""
     @AppStorage("accessWord") private var accessWord = ""
     @AppStorage("webAddress") private var webAddress = ""
+    @AppStorage("cover") private var cover = Cover.mask
 
     /// The grid the shape snaps to, in photo pixels.
     private static let cell = 16
@@ -104,6 +105,7 @@ struct AreaScreen: View {
         .background(Theme.background.ignoresSafeArea())
         .task(id: pick) { await load() }
         .onAppear { keepLaunchSettings() }
+        .onChange(of: cover) { shapesChanged() }
         .onChange(of: touching) {
             // A touch that is cut off gets no end call, and the next line must not join this one.
             if !touching { endLine() }
@@ -227,6 +229,13 @@ struct AreaScreen: View {
                         .keyboardType(.URL)
                 }
                 .listRowBackground(Theme.surface)
+                Section {
+                    Picker("Cover", selection: $cover) {
+                        Text("Mask").tag(Cover.mask)
+                        Text("Mosaic").tag(Cover.mosaic)
+                    }
+                }
+                .listRowBackground(Theme.surface)
             }
             .font(Theme.text(15))
             .scrollContentBackground(.hidden)
@@ -244,7 +253,7 @@ struct AreaScreen: View {
         .presentationBackground(Theme.background)
     }
 
-    /// The photo with the yellow face, the area that takes the finger, and the finger's line on top.
+    /// The photo with its cover, the area that takes the finger, and the finger's line on top.
     /// The line shows only while the finger is down.
     private func canvas(_ photo: PreparedPhoto) -> some View {
         Image(uiImage: photo.image)
@@ -348,9 +357,9 @@ struct AreaScreen: View {
             return
         }
         let older = PenShape.joined(Array(shapes.dropLast()), photoWidth: photo.width, photoHeight: photo.height, cell: Self.cell)?.boxes ?? []
-        let (width, height, cell, first) = (photo.width, photo.height, Self.cell, newest?.boxes.first)
+        let (image, cell, first, chosen) = (photo.image, Self.cell, newest?.boxes.first, cover)
         previewTask = Task.detached(priority: .userInitiated) {
-            let drawn = AreaPreview.layers(width: width, height: height, boxes: boxes, older: older, newest: first, cell: cell)
+            let drawn = AreaPreview.layers(image, boxes: boxes, older: older, newest: first, cell: cell, cover: chosen)
             await MainActor.run {
                 guard !Task.isCancelled else { return }
                 still = drawn?.still
