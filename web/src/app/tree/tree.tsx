@@ -47,6 +47,88 @@ function branchWords(branch: Branch | null) {
   return parts.join(", ");
 }
 
+type Reading = {
+  name: string;
+  resolver: string | null;
+  address: string | null;
+  owner: string | null;
+  texts: Record<string, string | null>;
+  contenthash: string | null;
+  swarm: string | null;
+};
+
+type Looked =
+  | { state: "read"; reading: Reading; primaryName: string | null }
+  | { state: "not-in-tree" | "unreachable" | "failed" };
+
+/** Reads one tree name: who holds it, where it points, and its records. */
+function Lookup({ root }: { root: string }) {
+  const [name, setName] = useState("");
+  const [looked, setLooked] = useState<Looked | null>(null);
+
+  async function look(event: React.FormEvent) {
+    event.preventDefault();
+    setLooked(null);
+    try {
+      const response = await fetch(`/api/tree/status?name=${encodeURIComponent(name.trim())}`, {
+        cache: "no-store",
+      });
+      setLooked((await response.json()) as Looked);
+    } catch {
+      setLooked({ state: "failed" });
+    }
+  }
+
+  return (
+    <section className="others" aria-live="polite">
+      <h2>Read a name</h2>
+      <form className="add" onSubmit={look}>
+        <label className="field">
+          <span>Name (under users.{root} or events.{root})</span>
+          <input
+            type="text"
+            autoComplete="off"
+            autoCapitalize="none"
+            spellCheck={false}
+            required
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+          />
+        </label>
+        <button type="submit">Read</button>
+      </form>
+      {looked?.state === "read" ? (
+        <dl className="seal">
+          <dt>Name</dt>
+          <dd className="mono">{looked.reading.name}</dd>
+          <dt>Held by</dt>
+          <dd className="mono">{looked.reading.owner ?? "Not registered"}</dd>
+          <dt>Address</dt>
+          <dd className="mono">{looked.reading.address ?? "None"}</dd>
+          <dt>Its primary name</dt>
+          <dd className="mono">{looked.primaryName ?? "None"}</dd>
+          <dt>Resolver</dt>
+          <dd className="mono">{looked.reading.resolver ?? "None"}</dd>
+          <dt>Swarm</dt>
+          <dd className="mono">{looked.reading.swarm ?? "None"}</dd>
+          {Object.entries(looked.reading.texts).map(([key, value]) => (
+            <div key={key}>
+              <dt>{key}</dt>
+              <dd className="mono">{value ?? "None"}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : looked ? (
+        <p className="state bad" role="status">
+          {looked.state === "not-in-tree"
+            ? "That name is not in the tree."
+            : "The name cannot be read just now."}
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
 export function TreeSetup() {
   const [status, setStatus] = useState<Status | null>(null);
   const [failed, setFailed] = useState(false);
@@ -185,6 +267,7 @@ export function TreeSetup() {
           </p>
         )}
       </section>
+      {status.root && <Lookup root={status.root} />}
     </>
   );
 }

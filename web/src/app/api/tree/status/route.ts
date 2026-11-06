@@ -1,17 +1,25 @@
 import { connection } from "next/server";
 import { normalName } from "@/lib/ens";
 import { treeStatus } from "@/lib/tree-setup";
-import { readTreeName, treeRoot } from "@/lib/tree";
+import { isAddress } from "viem";
+import { primaryName, readTreeName, treeRoot } from "@/lib/tree";
 
 /**
  * Which pieces of the tree exist, read from the chain, with the bot's balance and what the rest
  * would cost. With ?name=, reads that one tree name instead, the way anyone else would: through
- * the Universal Resolver.
+ * the Universal Resolver, with the primary name of the address it points to. With ?address=,
+ * reads that address's primary name.
  */
 export async function GET(request: Request) {
   await connection();
   const headers = { "cache-control": "no-store" };
-  const asked = new URL(request.url).searchParams.get("name");
+  const params = new URL(request.url).searchParams;
+  const address = params.get("address");
+  if (address !== null) {
+    if (!isAddress(address)) return Response.json({ state: "not-an-address" }, { status: 400, headers });
+    return Response.json({ state: "read", address, primaryName: await primaryName(address) }, { headers });
+  }
+  const asked = params.get("name");
   if (asked !== null) {
     const name = normalName(asked);
     const root = treeRoot();
@@ -21,7 +29,9 @@ export async function GET(request: Request) {
       (name.endsWith(`.users.${root}`) || name.endsWith(`.events.${root}`));
     if (!inTree) return Response.json({ state: "not-in-tree" }, { status: 404, headers });
     try {
-      return Response.json({ state: "read", reading: await readTreeName(name) }, { headers });
+      const reading = await readTreeName(name);
+      const primary = reading.address ? await primaryName(reading.address) : null;
+      return Response.json({ state: "read", reading, primaryName: primary }, { headers });
     } catch {
       return Response.json({ state: "unreachable" }, { status: 503, headers });
     }
