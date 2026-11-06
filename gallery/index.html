@@ -333,8 +333,11 @@
 <script>
 'use strict';
 
-// The top of the tree, as the page writes it. ENS keeps names in lower case. This page reads records, not the chain.
-const ROOT_NAME = 'zk-Seal.eth';
+// The top of the tree when the page is not opened through an ENS name. Only a name with an owner on mainnet goes here. This page reads records, not the chain.
+const ROOT_NAME = 'zk-seal.eth';
+// Opened through an ENS name, by any gateway, the page names the root it was opened under.
+const rootInHost = /(?:^|\.)([a-z0-9-]+\.eth)(?:\.|$)/.exec(window.location.hostname);
+const ROOT_SHOWN = rootInHost ? rootInHost[1] : ROOT_NAME;
 // The names in the tree, in this order. A name shows as real only if Arkiv has a record for it. Otherwise it says "not yet".
 const USERS = ['armanc', 'abena', 'serhas'];
 const EVENTS = ['devcon', 'devconnect', 'ethglobal'];
@@ -1026,7 +1029,7 @@ function draw(linked) {
       if (!photo.person.unnamed) addName(photo.person.owner, shortImage(photo.imageName) || 'Photo');
     }
   }
-  if (!ui.tree.firstChild) ui.tree.append(make('div', 'root', ROOT_NAME), make('div', 'split'));
+  if (!ui.tree.firstChild) ui.tree.append(make('div', 'root', ROOT_SHOWN), make('div', 'split'));
   // The two branches are redrawn only when what they say has changed.
   const sign = JSON.stringify([
     rows.users !== null,
