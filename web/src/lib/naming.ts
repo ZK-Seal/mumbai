@@ -52,7 +52,10 @@ export async function createUserName(label: string, pass: string): Promise<void>
 }
 
 /** How many numbers a photo's name tries before it is given up for now. */
-const IMAGE_NAME_TRIES = 5;
+const IMAGE_NAME_TRIES = 10;
+
+/** How far below the next free number the scan starts, to find a name this seal holds already. */
+const IMAGE_NAME_BACK = 4;
 
 /** The photo names of each event, one after another, so two photos never count the same number. */
 const eventQueues = new Map<string, Promise<unknown>>();
@@ -61,9 +64,10 @@ const eventQueues = new Map<string, Promise<unknown>>();
 const namingImages = new Set<string>();
 
 /**
- * Names the photo of one seal on chain: image<N> under its event, with N one more than the photo
- * names kept for that event so far. A number that holds another seal already is skipped, up to
- * IMAGE_NAME_TRIES numbers. Once the name is there it is kept, so the seal is not named twice.
+ * Names the photo of one seal on chain: image<N> under its event. The scan starts a few numbers
+ * below the count of photo names kept for that event, so a number that holds this seal already (a
+ * name created on chain whose record was lost) is found and kept, not a second one made. A number
+ * that holds another seal is skipped, up to IMAGE_NAME_TRIES numbers. Once the name is there it is kept, so the seal is not named twice.
  * Only a seal at an event, authorised by a person with a user name, is named. Meant to run after
  * the answer is sent, and says in one log line how it went.
  */
@@ -92,7 +96,8 @@ async function nameNow(record: SealRecord, event: string, ref: string): Promise<
     store.getName(record.hash),
   ]);
   if (!user || kept) return;
-  let n = (await store.namesByEvent(event)).length + 1;
+  const count = (await store.namesByEvent(event)).length;
+  let n = Math.max(1, count - IMAGE_NAME_BACK);
   for (let tries = 0; tries < IMAGE_NAME_TRIES; tries++, n++) {
     // A number already holding this seal (a name created before its record was kept) is kept;
     // one holding another seal is "taken", and the next number is tried.
