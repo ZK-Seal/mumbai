@@ -30,6 +30,12 @@ struct ResultScreen: View {
     @AppStorage("webAddress") private var webAddress = ""
     @AppStorage("cover") private var cover = Cover.mask
     @AppStorage("event") private var event = ""
+    @AppStorage("userName") private var userName = ""
+    @AppStorage("nameStepShown") private var nameStepShown = false
+    @State private var showNameStep = false
+    @State private var afterName: URL?
+    @State private var imageName: ImageName?
+    @State private var imageWatch: Task<Void, Never>?
     @State private var sheet = AuthoriseSheet()
     @State private var world = WorldStep()
     @State private var authorising = Authorising.notYet
@@ -69,6 +75,15 @@ struct ResultScreen: View {
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 4)
                             .accessibilityIdentifier("authorised")
+                        if let imageName, imageName.state != "failed" {
+                            Text(imageName.name)
+                                .font(Theme.text(14))
+                                .foregroundStyle(imageName.state == "done" ? Color.primary : Theme.muted)
+                                .multilineTextAlignment(.center)
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity)
+                                .accessibilityIdentifier("imageName")
+                        }
                         switch sending {
                         case .none:
                             EmptyView()
@@ -92,7 +107,7 @@ struct ResultScreen: View {
                         ProgressView()
                             .frame(maxWidth: .infinity)
                     case .notYet, .notAuthorised:
-                        Button { authorise(link) } label: {
+                        Button { pressAuthorise(link) } label: {
                             Theme.mainLabel(Text("Authorise this seal"))
                         }
                         .buttonStyle(.borderedProminent)
@@ -117,7 +132,33 @@ struct ResultScreen: View {
             .padding(16)
         }
         .task { await load() }
-        .onDisappear { world.stop() }
+        .onDisappear {
+            world.stop()
+            imageWatch?.cancel()
+        }
+        .sheet(isPresented: $showNameStep, onDismiss: {
+            if let link = afterName {
+                afterName = nil
+                authorise(link)
+            }
+        }) {
+            NavigationStack {
+                NameScreen { showNameStep = false }
+            }
+            .tint(Theme.accent)
+            .presentationBackground(Theme.background)
+        }
+    }
+
+    /// The name step comes once, before the first authorising, if no name is saved. Closing it goes on to authorise.
+    private func pressAuthorise(_ link: URL) {
+        guard userName.isEmpty, !nameStepShown else {
+            authorise(link)
+            return
+        }
+        nameStepShown = true
+        afterName = link
+        showNameStep = true
     }
 
     /// First the World app, with no page between. If the web side cannot be read or the World app cannot be opened,
@@ -129,10 +170,12 @@ struct ResultScreen: View {
         let base = AuthoriseLink.base(fromSettings: webAddress)
         Task {
             switch await world.run(base: base, hash: result.hash, event: AuthoriseLink.event(fromSettings: event)) {
-            case .authorised(let token):
+            case .authorised(let token, let image):
                 authorising = .authorised
+                imageName = image
                 pictureToken = token
                 sendPicture()
+                watchImage()
             case .notAuthorised:
                 authorising = .notAuthorised
             case .worldFailed(let word):
@@ -145,6 +188,7 @@ struct ResultScreen: View {
                     return
                 }
                 authorising = .authorised
+                watchImage()
             }
         }
     }
@@ -159,8 +203,26 @@ struct ResultScreen: View {
             let jpeg = await Task.detached(priority: .userInitiated) { PictureUpload.jpeg(from: picture) }.value
             if let jpeg, await PictureUpload.send(jpeg, base: base, hash: result.hash, token: pictureToken) {
                 sending = .none
+                // The web side names the image only after it keeps the picture.
+                watchImage()
             } else {
                 sending = .failed
+            }
+        }
+    }
+
+    /// Asks for the image's ENS name until it is finished. It takes a while on the chain. Nothing shows until there is one.
+    private func watchImage() {
+        imageWatch?.cancel()
+        let base = AuthoriseLink.base(fromSettings: webAddress)
+        imageWatch = Task {
+            for _ in 0..<40 {
+                if let found = await Names.image(base: base, hash: result.hash) {
+                    imageName = found
+                    if found.state != "pending" { return }
+                }
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                if Task.isCancelled { return }
             }
         }
     }

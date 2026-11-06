@@ -23,6 +23,12 @@ If the web side cannot be read or the World app cannot be opened, it opens that 
 It sends the hash, the edit, the size and `from=app` to that page, in the link, with no photo. It also sends an event's short name, set in Settings or with `EVENT_SLUG` at launch, but only if it is 3 to 40 lowercase letters, digits and hyphens, with no hyphen first.
 The page comes back through a `blankdemo://` link, and the app does not trust that link alone. "Authorised" shows only if the link names this hash and the web side then answers with a record for it. Anything else shows "Not authorised", and the button stays.
 
+## Your name
+
+Once, before the first authorising, and at any time from Settings, the app asks for a short name of 3 to 20 lowercase letters, digits or hyphens. The person proves in the World app that they are one human, and the web side checks that and makes an ENS name for them, in the background. The app keeps the name on the phone and shows "pending" until the web side says it is done.
+The registrar is our server, not a contract. The name goes on a public chain and stays there, and it links that person's photos across events.
+If the web side has made an ENS name for a picture, the result shows it under "Authorised".
+
 ## The picture after authorising
 
 After the web side verifies a new authorisation, the app sends it the picture with its cover, and the web side puts that picture on Swarm, where anyone can read it. How long Swarm keeps it is not promised.

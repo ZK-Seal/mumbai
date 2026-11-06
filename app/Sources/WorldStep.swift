@@ -7,12 +7,29 @@ import UIKit
 final class WorldStep {
     enum Outcome {
         /// The token comes only with the answer that made the record, and it lets the app send the picture once it has one.
-        case authorised(pictureToken: String?)
+        case authorised(pictureToken: String?, image: ImageName?)
         case notAuthorised
         /// World's own error word, from its fixed list.
         case worldFailed(String)
         /// The web side could not be read, or the World app could not be opened, so the sheet takes over.
         case useSheet
+    }
+
+    enum JoinOutcome {
+        case registered(name: String, state: String)
+        /// The web side's own word for why not.
+        case refused(String)
+        /// World's own error word, from its fixed list.
+        case worldFailed(String)
+        /// The routes are not there, the answer could not be read, or the World app could not be opened.
+        case unavailable
+    }
+
+    private enum Proof {
+        case json(String)
+        case worldFailed(String)
+        case cannotStart
+        case unreadable
     }
 
     /// What the web side answers to a start. `ready` carries the rest.
@@ -25,6 +42,7 @@ final class WorldStep {
             var signature: String
         }
         var state: String
+        var reason: String?
         var app_id: String?
         var action: String?
         var environment: String?
@@ -36,6 +54,16 @@ final class WorldStep {
     private struct Finish: Decodable {
         var state: String
         var picture_token: String?
+        var image: ImageName?
+
+        /// Only the state is needed. An extra field in another form must not undo "verified".
+        init(from decoder: Decoder) throws {
+            enum Keys: String, CodingKey { case state, picture_token, image }
+            let box = try decoder.container(keyedBy: Keys.self)
+            state = try box.decode(String.self, forKey: .state)
+            picture_token = try? box.decodeIfPresent(String.self, forKey: .picture_token)
+            image = try? box.decodeIfPresent(ImageName.self, forKey: .image)
+        }
 
         /// Nil unless it has its fixed form, so nothing else can reach a header.
         var token: String? {
@@ -47,40 +75,83 @@ final class WorldStep {
     /// The web side's signed start lasts five minutes, so no wait is longer.
     private static let mostWait: UInt64 = 300_000
 
+    private struct Joined: Decodable {
+        var state: String
+        var reason: String?
+        var name: String?
+        var ens: NameState?
+    }
+
     private var polling: Task<IDKitCompletionResult, Never>?
 
     func run(base: String, hash: String, event: String?) async -> Outcome {
         guard let start: Start = await post(base, "/api/world/request", body(hash: hash, event: event), limit: 15) else { return .useSheet }
         // This answer carries the seal's record itself.
-        if start.state == "authorised" { return .authorised(pictureToken: nil) }
+        if start.state == "authorised" { return .authorised(pictureToken: nil, image: nil) }
         guard start.state == "ready", start.signal == hash else { return .notAuthorised }
-        guard let request = await makeRequest(from: start, hash: hash) else { return .useSheet }
+        let json: String
+        switch await prove(start, signal: hash) {
+        case .json(let made): json = made
+        case .worldFailed(let word): return .worldFailed(word)
+        case .cannotStart: return .useSheet
+        case .unreadable: return .notAuthorised
+        }
+        let finish: Finish? = await post(base, "/api/world/verify", body(hash: hash, event: event, result: json), limit: 60)
+        // This answer is trusted as it is. A second call could miss a fresh record.
+        if let finish { return finish.state == "verified" ? .authorised(pictureToken: finish.token, image: Names.valid(finish.image)) : .notAuthorised }
+        // With no answer at all, the record may still have been kept.
+        return await AuthoriseLink.hasRecord(base: base, hash: hash) ? .authorised(pictureToken: nil, image: nil) : .notAuthorised
+    }
+
+    /// One person's name: the same World step, with the signal the web side gives. The label has a fixed form, so it needs no escaping.
+    func join(base: String, label: String) async -> JoinOutcome {
+        guard let start: Start = await post(base, "/api/user/request", "{\"label\":\"\(label)\"}", limit: 15) else { return .unavailable }
+        switch start.state {
+        case "ready": break
+        case "taken": return .refused("taken")
+        case "refused": return .refused(start.reason ?? "")
+        default: return .unavailable
+        }
+        guard let signal = start.signal, !signal.isEmpty else { return .unavailable }
+        let json: String
+        switch await prove(start, signal: signal) {
+        case .json(let made): json = made
+        case .worldFailed(let word): return .worldFailed(word)
+        case .cannotStart, .unreadable: return .unavailable
+        }
+        let answer: Joined? = await post(base, "/api/user/register", "{\"label\":\"\(label)\",\"result\":\(json)}", limit: 60)
+        guard let answer else { return .unavailable }
+        if answer.state == "registered", let name = answer.name, Names.isName(name) {
+            return .registered(name: name, state: answer.ens?.state ?? "pending")
+        }
+        return .refused(answer.state == "taken" ? "taken" : answer.reason ?? "")
+    }
+
+    /// One proof from the World app, as the web side's answer asks for it. The result comes back as the package wrote it.
+    private func prove(_ start: Start, signal: String) async -> Proof {
+        guard let request = await makeRequest(from: start, signal: signal) else { return .cannotStart }
         // The asking starts first, and it goes on while the person is away and after they return, before or after the proof arrives.
         let asking = Task { await request.pollUntilCompletion(options: IDKitPollOptions(pollIntervalMs: 1_000, timeoutMs: Self.mostWait)) }
         polling = asking
         defer { polling = nil }
         guard await UIApplication.shared.open(request.connectorURL, options: [:]) else {
             asking.cancel()
-            return .useSheet
+            return .cannotStart
         }
-        let result: IDKitResult
         switch await asking.value {
-        case .success(let proof): result = proof
-        case .failure(let code): return .worldFailed(code.rawValue)
+        case .failure(let code):
+            return .worldFailed(code.rawValue)
+        case .success(let result):
+            guard let json = try? idkitResultToJson(result: result) else { return .unreadable }
+            return .json(json)
         }
-        guard let json = try? idkitResultToJson(result: result) else { return .notAuthorised }
-        let finish: Finish? = await post(base, "/api/world/verify", body(hash: hash, event: event, result: json), limit: 60)
-        // This answer is trusted as it is. A second call could miss a fresh record.
-        if let finish { return finish.state == "verified" ? .authorised(pictureToken: finish.token) : .notAuthorised }
-        // With no answer at all, the record may still have been kept.
-        return await AuthoriseLink.hasRecord(base: base, hash: hash) ? .authorised(pictureToken: nil) : .notAuthorised
     }
 
     func stop() {
         polling?.cancel()
     }
 
-    private func makeRequest(from start: Start, hash: String) async -> IDKitRequest? {
+    private func makeRequest(from start: Start, signal: String) async -> IDKitRequest? {
         guard let appID = start.app_id, let action = start.action, let context = start.rp_context,
               let credential = start.credential, ["human", "selfie"].contains(credential),
               let rp = try? RpContext(rpId: context.rp_id, nonce: context.nonce, createdAt: context.created_at,
@@ -96,7 +167,7 @@ final class WorldStep {
         // The same rule as the web page. The sandbox answers a human check only with an older proof.
         let config = IDKitRequestConfig(appId: appID, action: action, rpContext: rp, allowLegacyProofs: credential == "human",
                                         returnTo: "\(AuthoriseLink.returnScheme)://authorised", environment: place)
-        let preset: Preset = credential == "human" ? .proofOfHuman(signal: hash) : .selfieCheck(signal: hash)
+        let preset: Preset = credential == "human" ? .proofOfHuman(signal: signal) : .selfieCheck(signal: signal)
         // This call waits on the network, so it runs away from the screen's thread.
         return await Task.detached { try? IDKit.request(config: config).preset(preset) }.value
     }

@@ -8,6 +8,7 @@ struct AreaScreen: View {
     @AppStorage("webAddress") private var webAddress = ""
     @AppStorage("event") private var event = ""
     @AppStorage("cover") private var cover = Cover.mask
+    @AppStorage("userName") private var userName = ""
 
     /// The grid the shape snaps to, in photo pixels.
     private static let cell = 16
@@ -228,6 +229,19 @@ struct AreaScreen: View {
                     TextField("Event", text: $event)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
+                }
+                .listRowBackground(Theme.surface)
+                Section {
+                    NavigationLink {
+                        NameScreen()
+                    } label: {
+                        LabeledContent("Your name") {
+                            Text(userName)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
+                    }
+                    .accessibilityIdentifier("yourName")
                 }
                 .listRowBackground(Theme.surface)
                 Section {
