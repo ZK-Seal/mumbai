@@ -2,9 +2,8 @@ import { Suspense } from "react";
 import { appReturn } from "@/lib/app-return";
 import { deskName } from "@/lib/ens";
 import { isEvent, records, type SealRecord } from "@/lib/records";
-import { gate } from "@/lib/signin";
 import { isSealHash } from "@/lib/world";
-import { Authorise, type Edit, type SigninNow, type SigninWord } from "./authorise";
+import { Authorise, type Edit } from "./authorise";
 
 type Query = Record<string, string | string[] | undefined>;
 
@@ -28,13 +27,6 @@ function readSeal(query: Query): Seal | null {
   return { hash, edit, width, height, event: event ?? null };
 }
 
-const WORDS: SigninWord[] = ["denied", "expired", "failed", "class"];
-
-/** The word a sign-in came back with, if it is one of ours. */
-function readWord(value: string | string[] | undefined): SigninWord | null {
-  return WORDS.find((word) => word === value) ?? null;
-}
-
 async function SealPart({ searchParams }: { searchParams: Promise<Query> }) {
   const query = await searchParams;
   const seal = readSeal(query);
@@ -47,14 +39,8 @@ async function SealPart({ searchParams }: { searchParams: Promise<Query> }) {
   } catch {
     return <p className="state bad">The record of seals cannot be read just now. Try again later.</p>;
   }
-  // The app adds from=app when it opens this page in its sign-in sheet; nothing else counts.
+  // The app adds from=app when it opens this page in its browser sheet; nothing else counts.
   const fromApp = query.from === "app";
-  const now = await gate();
-  const signin: SigninNow = !now.setUp
-    ? { standing: "not-set-up", account: null }
-    : now.standing === "out"
-      ? { standing: "out", account: null }
-      : { standing: now.standing, account: now.account };
   return (
     <Authorise
       hash={seal.hash}
@@ -65,9 +51,6 @@ async function SealPart({ searchParams }: { searchParams: Promise<Query> }) {
       pass={kept?.pass ?? null}
       member={kept?.name ?? null}
       desk={deskName()}
-      signin={signin}
-      word={readWord(query.signin)}
-      fromApp={fromApp}
       toApp={fromApp ? appReturn(seal.hash) : null}
     />
   );

@@ -13,16 +13,6 @@ import { OtherSeals } from "./other-seals";
 
 export type Edit = "blank" | "blur";
 
-/** The word a sign-in came back with. */
-export type SigninWord = "denied" | "expired" | "failed" | "class";
-
-/** Where the person stands with Sign in with World when the page opens. */
-export type SigninNow = {
-  standing: "not-set-up" | "out" | "fresh" | "stale" | "other";
-  /** A short name for the signed-in account; never the account's subject. */
-  account: string | null;
-};
-
 type Ready = {
   app_id: `app_${string}`;
   action: string;
@@ -57,18 +47,6 @@ const EDIT_WORDS: Record<Edit, string> = {
 };
 
 const ENVIRONMENTS = ["production", "staging", "sandbox"];
-
-const WORD_SENTENCES: Record<SigninWord, string> = {
-  denied: "Sign-in was cancelled.",
-  expired: "Sign in again to continue.",
-  failed: "Sign-in did not work. Try again.",
-  class: "This account does not have the required verification.",
-};
-
-const STANDING_SENTENCES: Partial<Record<SigninNow["standing"], string>> = {
-  stale: "Sign in again to continue.",
-  other: "This account does not have the required verification.",
-};
 
 /** Takes the server's start answer apart. Null unless it has every piece the World app needs. */
 function readReady(answer: unknown): Ready | null {
@@ -152,36 +130,10 @@ export function Authorise(props: {
   member: string | null;
   /** The desk this server asks about names, if one is set up. */
   desk: string | null;
-  signin: SigninNow;
-  word: SigninWord | null;
-  /** The app opened this page; kept on every link the page makes. */
-  fromApp: boolean;
   /** The links back to the app, when the app opened this page and the way back is set up. */
   toApp: AppReturn | null;
 }) {
   const { hash, event, toApp } = props;
-  const [signin, setSignin] = useState<SigninNow>(props.signin);
-  const [word, setWord] = useState<SigninWord | null>(props.word);
-  const signinRefused = useRef(false);
-  const back =
-    `/authorise?hash=${hash}&edit=${props.edit}&w=${props.width}&h=${props.height}` +
-    (event ? `&event=${event}` : "") +
-    (props.fromApp ? "&from=app" : "");
-  const startUrl = `/api/auth/start?return=${encodeURIComponent(back)}`;
-
-  /** The server said the sign-in is missing, too old or of the wrong class. */
-  function needSignin() {
-    setSignin((now) => (now.standing === "fresh" ? { ...now, standing: "stale" } : now));
-    setWord(null);
-    setPhase({ name: "idle" });
-  }
-
-  async function signOut() {
-    await fetch("/api/auth/signout", { method: "POST" }).catch(() => null);
-    setSignin({ standing: "out", account: null });
-    setWord(null);
-    setPhase((now) => (now.name === "verified" ? now : { name: "idle" }));
-  }
   const [phase, setPhase] = useState<Phase>(() => {
     const kept = readPass(props.pass);
     const member = readText(props.member);
@@ -220,10 +172,6 @@ export function Authorise(props: {
       authorised(kept);
       return;
     }
-    if (word?.reason === "sign-in") {
-      needSignin();
-      return;
-    }
     if (word?.reason === "not-set-up") {
       setPhase({ name: "not-set-up" });
       return;
@@ -240,7 +188,6 @@ export function Authorise(props: {
       reason?: unknown;
       pass?: unknown;
     } | null;
-    signinRefused.current = answer?.reason === "sign-in";
     const verified = answer?.state === "verified" ? readVerified(answer, answer.pass) : null;
     if (verified === null) throw new Error("not verified");
     pass.current = verified;
@@ -248,13 +195,11 @@ export function Authorise(props: {
 
   function done() {
     if (pass.current) authorised(pass.current);
-    else if (signinRefused.current) needSignin();
     else setPhase({ name: "denied" });
   }
 
   function failed() {
-    if (signinRefused.current) needSignin();
-    else setPhase({ name: "denied" });
+    setPhase({ name: "denied" });
   }
 
   function closed(open: boolean) {
@@ -283,10 +228,6 @@ export function Authorise(props: {
           </>
         )}
       </dl>
-
-      {signin.standing !== "not-set-up" && phase.name !== "verified" && (
-        <SigninPart signin={signin} word={word} startUrl={startUrl} onSignOut={signOut} />
-      )}
 
       {phase.name === "verified" ? (
         <>
@@ -317,7 +258,7 @@ export function Authorise(props: {
         <p className="state" role="status">
           World ID is not set up on this server yet.
         </p>
-      ) : signin.standing === "not-set-up" || signin.standing === "fresh" ? (
+      ) : (
         <>
           {props.desk && (
             <label className="field">
@@ -340,7 +281,7 @@ export function Authorise(props: {
             Authorise with World ID
           </button>
         </>
-      ) : null}
+      )}
 
       {phase.name === "open" && (
         <IDKitRequestWidget
@@ -392,42 +333,4 @@ function DeskLine({ verified }: { verified: Verified }) {
     );
   }
   return null;
-}
-
-/** Sign in with World: shown first, before a seal can be authorised. */
-function SigninPart(props: {
-  signin: SigninNow;
-  word: SigninWord | null;
-  startUrl: string;
-  onSignOut: () => void;
-}) {
-  const { standing, account } = props.signin;
-  const fromWord = standing === "out" && props.word ? WORD_SENTENCES[props.word] : null;
-  const sentence = STANDING_SENTENCES[standing] ?? fromWord;
-  return (
-    <div className="signin">
-      {standing !== "out" && account && (
-        <p className="soft">
-          Signed in with World as account <span className="mono">{account}</span>.
-        </p>
-      )}
-      {sentence && (
-        <p className="state bad" role="status">
-          {sentence}
-        </p>
-      )}
-      <div className="actions">
-        {standing !== "fresh" && (
-          <a className="button" href={props.startUrl}>
-            Sign in with World
-          </a>
-        )}
-        {standing !== "out" && (
-          <button type="button" className="quiet" onClick={props.onSignOut}>
-            Sign out
-          </button>
-        )}
-      </div>
-    </div>
-  );
 }

@@ -1,6 +1,5 @@
 import { deskName, deskOf, ethClient, vouch, type Vouch } from "@/lib/ens";
 import { isEvent, records, type SealRecord } from "@/lib/records";
-import { actingAccount } from "@/lib/signin";
 import { boundNullifier, isSealHash, worldAccepts, worldConfig } from "@/lib/world";
 
 /** `vouch` says what the desk answered about a name given with this authorisation, if any. */
@@ -26,12 +25,12 @@ function storeFailed() {
 /**
  * Finishes one authorisation. The proof must be tied to this seal's hash, and World must
  * accept it. Every answer is a word from a short fixed list. The first authorisation of a seal
- * is kept; a later one gets the kept record back and changes nothing. When sign-in is set up,
- * the person must still be freshly signed in, and the record keeps a short name for the account.
+ * is kept; a later one gets the kept record back and changes nothing. No account is kept with
+ * the record.
  *
  * A person may also give their name at the desk. The name is kept with the record only when the
  * desk vouches for it, as the chain says now: it is a member of the desk, and it carries this
- * authorisation's pass, or the signed-in account. A name the desk does not vouch for is dropped;
+ * authorisation's pass. A name the desk does not vouch for is dropped;
  * the authorisation itself still stands.
  */
 export async function POST(request: Request) {
@@ -56,10 +55,6 @@ export async function POST(request: Request) {
     return storeFailed();
   }
   if (kept) return verified(kept);
-  const account = await actingAccount();
-  if (account === false) {
-    return Response.json({ state: "refused", reason: "sign-in" }, { status: 401 });
-  }
   const nullifier = boundNullifier(body.result, body.hash, config);
   if (nullifier === null) {
     return Response.json({ state: "refused", reason: "not-this-seal" }, { status: 422 });
@@ -72,7 +67,7 @@ export async function POST(request: Request) {
   if (typeof body.name === "string" && body.name.trim() !== "") {
     const desk = deskName();
     const answer = desk
-      ? await vouch(ethClient(), desk, body.name, nullifier, account)
+      ? await vouch(ethClient(), desk, body.name, nullifier, null)
       : { vouch: "not-vouched" as const, name: null };
     asked = answer.vouch;
     name = answer.name;
@@ -83,7 +78,7 @@ export async function POST(request: Request) {
       hash: body.hash,
       pass: nullifier,
       credential: config.credential,
-      account,
+      account: null,
       name,
       event,
       at: new Date().toISOString(),

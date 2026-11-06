@@ -1,11 +1,9 @@
 import { isEvent, records, type SealRecord } from "@/lib/records";
-import { actingAccount } from "@/lib/signin";
 import { isSealHash, requestContext, worldConfig } from "@/lib/world";
 
 /**
  * Starts one authorisation: hands the page what the World app needs for this seal. A seal that
- * is already authorised gets its record back instead. When sign-in is set up, only someone who
- * signed in with World in the last few minutes, with the required verification, may start.
+ * is already authorised gets its record back instead.
  */
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as
@@ -33,9 +31,6 @@ export async function POST(request: Request) {
       event: kept.event,
       at: kept.at,
     });
-  }
-  if ((await actingAccount()) === false) {
-    return Response.json({ state: "refused", reason: "sign-in" }, { status: 401 });
   }
   const config = worldConfig();
   if (!config) {
