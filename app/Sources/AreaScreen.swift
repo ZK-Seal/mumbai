@@ -6,6 +6,7 @@ struct AreaScreen: View {
     @AppStorage("serviceAddress") private var serviceAddress = ""
     @AppStorage("accessWord") private var accessWord = ""
     @AppStorage("webAddress") private var webAddress = ""
+    @AppStorage("event") private var event = ""
     @AppStorage("cover") private var cover = Cover.mask
 
     /// The grid the shape snaps to, in photo pixels.
@@ -224,6 +225,9 @@ struct AreaScreen: View {
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .keyboardType(.URL)
+                    TextField("Event", text: $event)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
                 }
                 .listRowBackground(Theme.surface)
                 Section {
@@ -308,6 +312,7 @@ struct AreaScreen: View {
         if let address = given["SERVICE_URL"], !address.isEmpty { serviceAddress = address }
         if let word = given["SERVICE_WORD"], !word.isEmpty { accessWord = word }
         if let web = given["WEB_URL"], !web.isEmpty { webAddress = web }
+        if let name = given["EVENT_SLUG"], !name.isEmpty { event = name }
     }
 
     private func endLine() {

@@ -29,9 +29,13 @@ struct ResultScreen: View {
 
     @AppStorage("webAddress") private var webAddress = ""
     @AppStorage("cover") private var cover = Cover.mask
-    @Environment(\.openURL) private var openURL
+    @AppStorage("event") private var event = ""
+    @State private var sheet = AuthoriseSheet()
+    @State private var authorising = Authorising.notYet
     @State private var picture: UIImage?
     @State private var problem = false
+
+    private enum Authorising { case notYet, waiting, notAuthorised, authorised }
 
     var body: some View {
         ScrollView {
@@ -51,12 +55,31 @@ struct ResultScreen: View {
                         .frame(maxWidth: .infinity)
                 }
                 if picture != nil, let link = AuthoriseLink.url(base: AuthoriseLink.base(fromSettings: webAddress), hash: result.hash,
-                                                                edit: "blank", width: width, height: height) {
-                    Button { openURL(link) } label: {
-                        Theme.mainLabel(Text("Authorise this seal"))
+                                                                edit: "blank", width: width, height: height,
+                                                                event: AuthoriseLink.event(fromSettings: event)) {
+                    switch authorising {
+                    case .authorised:
+                        Text("Authorised")
+                            .font(Theme.text(17, .semibold))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 4)
+                            .accessibilityIdentifier("authorised")
+                    case .waiting:
+                        ProgressView()
+                            .frame(maxWidth: .infinity)
+                    case .notYet, .notAuthorised:
+                        Button { authorise(link) } label: {
+                            Theme.mainLabel(Text("Authorise this seal"))
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
+                        if authorising == .notAuthorised {
+                            Text("Not authorised")
+                                .font(Theme.text(15))
+                                .frame(maxWidth: .infinity)
+                                .accessibilityIdentifier("notAuthorised")
+                        }
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
                 }
                 Button { onDone() } label: {
                     Text("Start over")
@@ -70,6 +93,20 @@ struct ResultScreen: View {
             .padding(16)
         }
         .task { await load() }
+    }
+
+    /// The page's way back is only a hint. The word shows only after the web side answers with a record for this seal.
+    private func authorise(_ link: URL) {
+        authorising = .waiting
+        Task {
+            let back = await sheet.open(link)
+            guard AuthoriseLink.saysAuthorised(back, hash: result.hash),
+                  await AuthoriseLink.hasRecord(base: AuthoriseLink.base(fromSettings: webAddress), hash: result.hash) else {
+                authorising = .notAuthorised
+                return
+            }
+            authorising = .authorised
+        }
     }
 
     private func load() async {

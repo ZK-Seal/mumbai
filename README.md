@@ -17,8 +17,9 @@ The app's screens do not explain any of this, so the facts are here.
 
 ## The button
 
-"Authorise this seal" shows with the picture, only if a web address is set. It opens that page in the browser. The address comes from Settings or from `WEB_URL` at launch, and it is not in this repo.
-It sends the hash, the edit and the size to that page, in the link. It sends no photo.
+"Authorise this seal" shows with the picture, only if a web address is set. It opens that page in a sheet inside the app. The address comes from Settings or from `WEB_URL` at launch, and it is not in this repo.
+It sends the hash, the edit, the size and `from=app` to that page, in the link. It sends no photo. It also sends an event's short name, set in Settings or with `EVENT_SLUG` at launch, but only if it is 3 to 40 lowercase letters, digits and hyphens, with no hyphen first.
+The page comes back through a `blankdemo://` link, and the app does not trust that link alone. "Authorised" shows only if the link names this hash and the web side then answers with a record for it. Anything else shows "Not authorised", and the button stays.
 
 ## The cover on the screen
 
@@ -59,4 +60,5 @@ Public Sans, under the SIL Open Font License. The licence is beside it in `app/F
 - **It is not a privacy guarantee.** The file still carries a map of the area, which can show outlines, even writing on plain paper, and the original's hash.
 - **It does not show that a camera took the photo.** In this demo our test key signs the photo after the app sends it. That key is not on any trust list.
 - **It does not cover the look on the screen.** The mask and the tiles are drawn by the app.
+- **The authorise page does not check the seal.** It checks only the hash's format, so anyone can type a made-up hash and authorise it.
 - **You cannot check it yourself.** The check is our server's word. The backend checks the proof, and the app shows the picture only if the check passed. The phone cannot recompute the hash, because it never holds the sealed file. The backend removes that file after the picture is fetched, or after 600 s if it is never fetched, and a service stop in that window can leave it until the next start. Once it is removed no one holds it, so the hash can no longer be checked against the file.
