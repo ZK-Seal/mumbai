@@ -42,7 +42,7 @@ export async function POST(request: Request) {
   if (!config) {
     return refused("not-set-up", 503, body?.hash);
   }
-  const action = actionFor(config, isEvent(body.event) ? body.event : null);
+  const action = actionFor(config, body.hash, isEvent(body.event) ? body.event : null);
   return Response.json({
     state: "ready",
     app_id: config.appId,

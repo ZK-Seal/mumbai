@@ -9,8 +9,19 @@ export type WorldConfig = {
   appId: `app_${string}`;
   rpId: string;
   signingKey: string;
+  /** The action photos are authorised with, or the stem of each photo's own action. */
   action: string;
-  /** Whether each event gets an action of its own (WORLD_EVENT_ACTIONS=on). Off by default. */
+  /** The action a person gives their user name with (WORLD_JOIN_ACTION, default `join`). */
+  joinAction: string;
+  /**
+   * `per-photo` (the default): each photo has an action of its own, drawn from its hash. `one`:
+   * every photo shares `action`. WORLD_PHOTO_ACTIONS sets it.
+   */
+  photoActions: "per-photo" | "one";
+  /**
+   * Whether each event gets an action of its own (WORLD_EVENT_ACTIONS=on). Off by default, and
+   * only heeded with WORLD_PHOTO_ACTIONS=one: a per-photo action is already one of a kind.
+   */
   eventActions: boolean;
   environment: Environment;
   credential: Credential;
@@ -30,6 +41,8 @@ export function worldConfig(): WorldConfig | null {
     rpId,
     signingKey,
     action: process.env.WORLD_ACTION || "authorise-seal",
+    joinAction: process.env.WORLD_JOIN_ACTION || "join",
+    photoActions: process.env.WORLD_PHOTO_ACTIONS === "one" ? "one" : "per-photo",
     eventActions: process.env.WORLD_EVENT_ACTIONS === "on",
     environment:
       environment === "production" || environment === "sandbox" ? environment : "staging",
@@ -43,13 +56,18 @@ export function isSealHash(value: unknown): value is string {
 }
 
 /**
- * The World action for one request. A person's pass is drawn from the action, so one action for
- * everything gives one person the same pass on every seal and on their user name: that is what
- * ties a photo to its user. This is the default. With WORLD_EVENT_ACTIONS=on each event has an
- * action of its own instead, so a proof made for one event cannot stand for another, but then a
- * person's passes differ from event to event and no photo can be tied to a user name.
+ * The World action a photo is authorised with. The World app makes one proof per person and
+ * action, and refuses a second (`nullifier_replayed`), so a person who has given a proof for an
+ * action can never give another for it. Hence the join step has an action of its own
+ * (`joinAction`), and by default each photo too: `<action>-<first 16 hex of its hash>`. The
+ * request and verify routes both call this, so they always agree on it.
+ *
+ * With WORLD_PHOTO_ACTIONS=one every photo shares `action`, as before: then a person can
+ * authorise one photo only. WORLD_EVENT_ACTIONS=on gives each event an action of its own in that
+ * mode, and is ignored in per-photo mode.
  */
-export function actionFor(config: WorldConfig, event: string | null): string {
+export function actionFor(config: WorldConfig, hash: string, event: string | null): string {
+  if (config.photoActions === "per-photo") return `${config.action}-${hash.slice(0, 16)}`;
   return event === null || !config.eventActions ? config.action : `${config.action}-${event}`;
 }
 
@@ -197,4 +215,35 @@ export function pictureToken(config: WorldConfig, hash: string): string {
 export function pictureTokenMatches(config: WorldConfig, hash: string, given: string | null) {
   if (given === null || !/^[0-9a-f]{64}$/.test(given)) return false;
   return timingSafeEqual(Buffer.from(pictureToken(config, hash), "hex"), Buffer.from(given, "hex"));
+}
+
+/** The key sessions are signed with, drawn from the signing key under a fixed label. */
+function sessionKey(config: WorldConfig): Buffer {
+  return createHmac("sha256", config.signingKey).update("session-key").digest();
+}
+
+function sessionMac(config: WorldConfig, pass: string): string {
+  return createHmac("sha256", sessionKey(config)).update(`session:${pass}`).digest("hex");
+}
+
+/**
+ * The session a person is given with their user name: `<pass>.<hex HMAC-SHA256 over "session:"
+ * and the pass>`. With per-photo actions a photo's proof has a nullifier of its own, never the
+ * person's pass, so this session, given back with each photo, is what ties a photo to its named
+ * person. That link is our server's word; each photo still carries its own World proof of a
+ * unique human. Only the answer to a register call carries it; no other answer gives it.
+ */
+export function sessionFor(config: WorldConfig, pass: string): string {
+  return `${pass}.${sessionMac(config, pass)}`;
+}
+
+/** The pass a session given with a photo holds, or null if it is not one of ours. */
+export function sessionPass(config: WorldConfig, given: unknown): string | null {
+  if (typeof given !== "string" || given.length > 300) return null;
+  const dot = given.lastIndexOf(".");
+  const pass = given.slice(0, dot);
+  const mac = given.slice(dot + 1);
+  if (dot < 1 || !/^[0-9a-f]{64}$/.test(mac)) return null;
+  const want = Buffer.from(sessionMac(config, pass), "hex");
+  return timingSafeEqual(want, Buffer.from(mac, "hex")) ? pass : null;
 }

@@ -77,7 +77,7 @@ export async function POST(request: Request) {
     return storeFailed(body.hash);
   }
   if (kept) return verified(kept);
-  const action = actionFor(config, event);
+  const action = actionFor(config, body.hash, event);
   const nullifier = boundNullifier(body.result, body.hash, config, action);
   if (nullifier === null) {
     return refused("not-this-seal", 422, body?.hash);

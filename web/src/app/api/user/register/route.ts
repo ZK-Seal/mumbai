@@ -26,7 +26,7 @@ function refused(reason: string, status: number, label: unknown) {
 
 /**
  * Gives a person a name of their own, <label>.users.<root>, for a World proof made for
- * `user:<label>` with the single World action. Every answer is a word from a short fixed list.
+ * `user:<label>` with the join action. Every answer is a word from a short fixed list.
  *
  * One person keeps one name: a pass that has a name already gets that name back, and no new one.
  * A label kept for another pass, or already on chain, is `taken`. A new name is kept in the store
@@ -40,9 +40,9 @@ export async function POST(request: Request) {
   const label = body.label;
   const config = worldConfig();
   if (!config || !treeRoot()) return refused("not-set-up", 503, label);
-  const nullifier = boundNullifier(body.result, userSignal(label), config, config.action);
+  const nullifier = boundNullifier(body.result, userSignal(label), config, config.joinAction);
   if (nullifier === null) return refused("not-this-name", 422, label);
-  if (!(await worldAccepts(body.result, config, config.action))) {
+  if (!(await worldAccepts(body.result, config, config.joinAction))) {
     return refused("not-verified", 422, label);
   }
   let mine: UserRecord | null;
