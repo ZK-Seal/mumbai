@@ -121,6 +121,8 @@ private struct Painter {
     /// The cover, inside one smooth line that holds every sealed cell.
     func paint(_ boxes: [GridBox], pieces chosen: (Int) -> Bool, in context: CGContext) {
         let edge = AreaOutline.path(around: boxes, cell: area.cellSize, width: area.columns * area.cellSize, height: area.rows * area.cellSize)
+        // An empty path clips nothing, so with no outline nothing may be drawn. The first shape's still layer has none.
+        guard !edge.isEmpty else { return }
         switch look {
         case .mask(let face, let places):
             // The same yellow as the picture's own padding, so every sealed cell is covered and no second colour shows.
@@ -146,7 +148,7 @@ private struct Painter {
 /// The mosaic's colours, as a tiny picture with one pixel for each tile.
 private enum Mosaic {
     /// A tile's side, as a share of the picture's long side.
-    private static let tileShare = 0.03
+    private static let tileShare = 0.0185
 
     static func tiles(_ image: UIImage, area: CellArea, width: Int, height: Int) -> (image: UIImage, side: CGFloat)? {
         guard let picture = RawPixels(image), let space = CGColorSpace(name: CGColorSpace.sRGB) else { return nil }
