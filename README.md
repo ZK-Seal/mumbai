@@ -53,7 +53,7 @@ This is a demo. It is never safe for real protesters. See "What is true in this 
 | App | `app/` | Takes the photo, draws the cover, opens the World ID app, and shows the result |
 | Backend | Closed, not in this repo | Seals the photo and checks the proof. It removes the files after the job |
 | Web side | `web/` | Checks World proofs, keeps records on Arkiv, keeps pictures on Swarm, and makes the names |
-| Gallery | `gallery/` | One page that reads Arkiv and Swarm from the browser and shows an event |
+| Gallery | `gallery/` | One page that reads Arkiv and Swarm from the browser. It shows an event's images or a person's images, and asks ENS which names are on chain |
 | Contracts | `contracts/` | Registrars, written and fork-tested, not wired |
 
 1. **Seal.** The person draws over part of a photo. The backend seals it and returns a plain picture and a hash.
@@ -108,8 +108,8 @@ Once the root switch is real, a person's name is `<nickname>.users.zk-seal.eth`.
 | "Integration must use ENSv2 on Ethereum mainnet" | `web/src/lib/tree.ts`. The tree ran on a local fork of mainnet, with a phone and no real money | **Not there** on mainnet. TO FILL (Armanc): which names, under which root, and one link |
 | "integrate it into an existing project" | zkSeal is the existing project. The tree is in `web/src/lib/tree.ts` | There |
 | "It should be clear how ENSv2 improves the project" | "What it adds to the project", above | There |
-| "not just include hard-coded values" | A name comes from a real check: `registerUser` in `web/src/lib/tree.ts`. The gallery starts from six names, and each shows as real only with a row on Arkiv. Any other name found in a real row is listed after them | There in the code. **Not there** on mainnet |
-| "not just a cosmetic add-on" | Names come from real checks. But the gallery reads its names from Arkiv, not from ENS | A public page that reads ENS: **not there** |
+| "not just include hard-coded values" | A name comes from a real check: `registerUser` in `web/src/lib/tree.ts`. The gallery starts from six names, and each shows as real only with a row on Arkiv. Any other name found in a real row is listed after them. Clicking an event or a person shows their images | There in the code. **Not there** on mainnet |
+| "not just a cosmetic add-on" | Names come from real checks. The gallery lists names from Arkiv, and marks one "on chain" only if ENS on mainnet holds its exact record, read from the browser through the Universal Resolver | There in the code. It has never run, and no name of this tree is on mainnet yet, so no mark can show today |
 | "must have a link to a live demo" | The demo link at the top | **Not there** |
 | "code needs to be open source and accessible on Github" | This repo, under MIT | There |
 
@@ -170,7 +170,7 @@ You should see six rows, of two kinds. These are test rows. TO FILL (Armanc): th
 | "at least one feature users see reads its data from Arkiv" | `eventPhotos` in `web/src/lib/records.ts`, and `kindQuery` in `gallery/index.html` | There in the code. **Not there** on a link a judge can open |
 | The README gives "the wallet address(es) that wrote your entities" | Above | There |
 | The README gives "one query we can run" | Above | There, on test rows |
-| `schema.md`, `friction.md`, `reach.md`, `why-arkiv.md`, `how-you-use-arkiv.md` | `/arkiv/` | **Not there** yet |
+| `schema.md`, `friction.md`, `reach.md`, `why-arkiv.md`, `how-you-use-arkiv.md` | `/arkiv/` | There |
 | Answers "with links, numbers or a query we can run", from real rows | `/arkiv/` | **Not there**. Only test rows exist, under `test-run-a` and `test-run-b` |
 | "A public repo with an open-source license" | This repo, under MIT | There |
 | "Say how you used AI, as ETHGlobal's rules require" | "How we used AI", below, and the form | **Not there**. Serhas writes it |
@@ -193,16 +193,16 @@ Prize: the Arkiv + Swarm bonus (existing projects).
 | The prize asks for | Where | State |
 | --- | --- | --- |
 | "uses both Arkiv and Swarm" | The picture on Swarm, the pointer on Arkiv | There |
-| `swarm.md` | `/arkiv/swarm.md` | **Not there** yet |
-| "say what existed before the event" | "Old work and new work", below, and the line above | There in this README. **Not there** yet in `/arkiv/swarm.md`, where the prize wants it |
-| "which entity field holds the Swarm reference" | `ref` on `blank-demo.pictures`, in `web/src/lib/arkiv.ts` | There in this README. **Not there** yet in `/arkiv/swarm.md`, where the prize wants it |
+| `swarm.md` | `/arkiv/swarm.md` | There, with three TO FILL marks |
+| "say what existed before the event" | "Old work and new work", below, and the line above | There, in `/arkiv/swarm.md` |
+| "which entity field holds the Swarm reference" | `ref` on `blank-demo.pictures`, in `web/src/lib/arkiv.ts` | There, in `/arkiv/swarm.md` |
 | "One Arkiv entity key and the Swarm reference it points to, with a link" | The key is the picture pointer in the Arkiv section | **Not there**. TO FILL (Armanc): the Swarm reference |
 | "postage stamp batch ID" and "the wallet that bought it (or who gave you the batch)" | `web/src/lib/swarm.ts` sends 64 zeros, and the gateway uses its own stamp | **Not there**. We own no batch |
-| "the Bee node or service you uploaded through" | The public gateway, `https://api.gateway.ethswarm.org`, in `web/src/lib/swarm.ts` | There in this README. **Not there** yet in `/arkiv/swarm.md`, where the prize wants it |
-| "The files in your repo that upload to Swarm and read from it" | Upload: `uploadPicture` in `web/src/lib/swarm.ts`, and `web/src/app/api/picture/[hash]/route.ts`. Read: `gallery/index.html`, and `web/src/app/event/[event]/page.tsx` | There in this README. **Not there** yet in `/arkiv/swarm.md`, where the prize wants it |
+| "the Bee node or service you uploaded through" | The public gateway, `https://api.gateway.ethswarm.org`, in `web/src/lib/swarm.ts` | There, in `/arkiv/swarm.md` |
+| "The files in your repo that upload to Swarm and read from it" | Upload: `uploadPicture` in `web/src/lib/swarm.ts`, and `web/src/app/api/picture/[hash]/route.ts`. Read: `gallery/index.html`, and `web/src/app/event/[event]/page.tsx` | There, in `/arkiv/swarm.md` |
 | Steps for one upload and one read, and "what we should see" | `/arkiv/swarm.md` | **Not there**. The real output is not pasted yet |
 | "The moment in your demo video where Swarm is used" | The video | **Not there**. It is not filmed yet |
-| "What got in your way with Swarm" | `/arkiv/swarm.md` | **Not there** yet |
+| "What got in your way with Swarm" | `/arkiv/swarm.md` | There |
 | Never store an encrypted reference in an entity | `isSwarmRef` in `web/src/lib/swarm.ts` takes plain 64-hex references only | There |
 
 ## World
@@ -343,7 +343,7 @@ Its words name the root the tree is moving to. Until that switch is real, names 
 Pressing it runs these in order: the nickname, if the person has no name yet; the badge, if an event needs one; then the photo. With a session, the photo goes straight to the web side. With none, it takes its own World step.
 If the web side is ready, that World step goes to the World app and back, with no page between, through World's IDKit package, pinned to 4.2.0. The package's result goes to the web side unchanged. "Authorised" shows only after the web side answers that it verified the result, or answers with a record for this hash. A refusal or a failure shows "Not authorised", and the button stays. If the web side gives its own words for a refusal, the app shows those words as they are. If it refuses the saved session, the app forgets that session, and the next press goes on with no name.
 If the web side cannot be read or the World app cannot be opened, it opens that page in a sheet inside the app.
-It sends the hash, the edit, the size and `from=app` to that page, in the link, with no photo. It also sends an event's short name, set in Settings or with `EVENT_SLUG` at launch, but only if it is 3 to 40 lowercase letters, digits and hyphens, with no hyphen first.
+It sends the hash, the edit, the size and `from=app` to that page, in the link, with no photo. It also sends an event's short name, chosen above the button or in Settings, or set with `EVENT_SLUG` at launch, but only if it is 3 to 40 lowercase letters, digits and hyphens, with no hyphen first.
 The page comes back through a `blankdemo://` link, and the app does not trust that link alone. "Authorised" shows only if the link names this hash and the web side then answers with a record for it. Anything else shows "Not authorised", and the button stays.
 
 ## Your name
@@ -402,7 +402,7 @@ Its settings are environment variables, read in `web/src/lib/`. No key is in thi
 
 ### The gallery page
 
-`gallery/index.html` is one file. Open it in a browser. It reads Arkiv and Swarm by itself.
+`gallery/index.html` is one file. Open it in a browser. It reads Arkiv and Swarm by itself. If it cannot read ENS, it shows no "on chain" mark, and works as before.
 
 ### The contracts
 
