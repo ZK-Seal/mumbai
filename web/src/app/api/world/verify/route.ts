@@ -1,5 +1,11 @@
 import { deskName, deskOf, ethClient, vouch, type Vouch } from "@/lib/ens";
-import { isEvent, records, type SealRecord, type UserRecord } from "@/lib/records";
+import {
+  isEvent,
+  keepAfterWorld,
+  records,
+  type SealRecord,
+  type UserRecord,
+} from "@/lib/records";
 import {
   actionFor,
   boundNullifier,
@@ -130,20 +136,16 @@ export async function POST(request: Request) {
     name = answer.name;
   }
   const at = new Date().toISOString();
-  let record: SealRecord;
-  try {
-    record = await records().put({
-      hash: body.hash,
-      pass,
-      credential: config.credential,
-      account: null,
-      name,
-      event,
-      at,
-    });
-  } catch {
-    return storeFailed(body.hash);
-  }
+  const record = await keepAfterWorld({
+    hash: body.hash,
+    pass,
+    credential: config.credential,
+    account: null,
+    name,
+    event,
+    at,
+  });
+  if (!record) return storeFailed(body.hash);
   // Another request may have kept a record for this seal first; then this call made nothing new.
   const created = record.pass === pass && record.at === at;
   const person = user?.label ?? "anonymous";

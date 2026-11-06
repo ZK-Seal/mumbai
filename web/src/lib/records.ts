@@ -317,6 +317,54 @@ export class StoreError extends Error {
   }
 }
 
+/** Tries to keep a record after World accepted its proof: once, then this many more times. */
+export const PUT_RETRIES = 2;
+export const PUT_PAUSE_MS = 3000;
+/** How long a record that may have landed late is looked for, and how often. */
+export const LATE_WAIT_MS = 15000;
+export const LATE_POLL_MS = 3000;
+
+const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Keeps the record of a proof World has accepted. That proof cannot be made again, so a store
+ * failure here would lose the photo for good: the write is tried again, and when it still fails,
+ * the store is read for a while in case one of the writes landed late. Returns the kept record
+ * (a late one only if it is this call's: same pass, same time), or null when none can be found.
+ */
+export async function keepAfterWorld(
+  fresh: SealRecord,
+  store: RecordStore = records(),
+  timing = { pause: PUT_PAUSE_MS, wait: LATE_WAIT_MS, poll: LATE_POLL_MS },
+): Promise<SealRecord | null> {
+  const short = fresh.hash.slice(0, 8);
+  for (let attempt = 0; attempt <= PUT_RETRIES; attempt++) {
+    if (attempt > 0) await pause(timing.pause);
+    try {
+      return await store.put(fresh);
+    } catch {
+      console.log(`world/verify: store write ${attempt + 1} failed hash=${short}`);
+    }
+  }
+  const until = Date.now() + timing.wait;
+  for (;;) {
+    try {
+      const kept = await store.get(fresh.hash);
+      if (kept) {
+        const ours = kept.pass === fresh.pass && kept.at === fresh.at;
+        console.log(`world/verify: ${ours ? "late write" : "another record"} found hash=${short}`);
+        return kept;
+      }
+    } catch {
+      console.log(`world/verify: store read failed hash=${short}`);
+    }
+    if (Date.now() + timing.poll > until) break;
+    await pause(timing.poll);
+  }
+  console.log(`world/verify: no record after retries hash=${short}`);
+  return null;
+}
+
 /** An account name, as older records keep it: 16 lowercase hex characters. */
 export function isAccount(value: unknown): value is string {
   return typeof value === "string" && /^[0-9a-f]{16}$/.test(value);
