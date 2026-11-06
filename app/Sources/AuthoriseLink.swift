@@ -25,6 +25,11 @@ enum AuthoriseLink {
         return parts
     }
 
+    /// A web page in a sheet needs a secure address, so with a plain http web address the app does not offer the sheet.
+    static func sheetCanOpen(base: String) -> Bool {
+        URLComponents(string: base)?.scheme == "https"
+    }
+
     /// A plain address on the web side, with no values. Nil if the base is empty or is not a web address.
     static func address(base: String, path: String) -> URL? {
         guard var parts = place(base: base, path: path) else { return nil }

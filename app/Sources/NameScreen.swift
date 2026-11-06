@@ -104,7 +104,7 @@ struct NameScreen: View {
 
     /// The page's way back is only a hint. The name counts only when the web side lists it.
     private func joinInSheet(base: String, label wanted: String) async {
-        guard let link = AuthoriseLink.joinURL(base: base, label: wanted) else {
+        guard AuthoriseLink.sheetCanOpen(base: base), let link = AuthoriseLink.joinURL(base: base, label: wanted) else {
             line = "Names are not available now."
             return
         }

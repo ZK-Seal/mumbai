@@ -58,7 +58,7 @@ Choose your own signing team in Xcode, then run on a phone with iOS 17 or later.
 
 The app needs the backend's address and an access word. Enter them under Settings in the app, or set `SERVICE_URL` and `SERVICE_WORD` when you launch it. Neither is in this repo. Without the backend you can still draw and see the cover, but you cannot send.
 
-The app allows plain HTTP on a local network. Over plain HTTP the photo and the access word are not encrypted, so use a link you trust.
+The app allows plain HTTP on a local network, for the backend and for the web address. Over plain HTTP the photo, the access word and the picture are not encrypted, so use a link you trust. With a plain HTTP web address the app never opens the sheet or the join page, because those pages need a secure address.
 
 ## Fonts
 

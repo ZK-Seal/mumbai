@@ -186,6 +186,10 @@ struct ResultScreen: View {
                 failureWord = word
                 authorising = .notAuthorised
             case .useSheet:
+                guard AuthoriseLink.sheetCanOpen(base: base) else {
+                    authorising = .notAuthorised
+                    return
+                }
                 let back = await sheet.open(link)
                 guard AuthoriseLink.saysAuthorised(back, hash: result.hash), await AuthoriseLink.hasRecord(base: base, hash: result.hash) else {
                     authorising = .notAuthorised
