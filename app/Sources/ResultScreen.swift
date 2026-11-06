@@ -16,7 +16,7 @@ struct JobResult {
     }
 }
 
-/// The result: the picture with its tiles. It has no save or share button.
+/// The result: the picture with its yellow face. It has no save or share button.
 struct ResultScreen: View {
     let client: ServiceClient
     let jobID: String
@@ -82,7 +82,7 @@ struct ResultScreen: View {
         // Drawn away from the screen's own thread, so a large picture does not stop the screen.
         let (areas, size) = (boxes, cell)
         let shown = await Task.detached(priority: .userInitiated) {
-            AreaPreview.mosaic(image, boxes: areas, cell: size)
+            AreaPreview.face(image, boxes: areas, cell: size)
         }.value
         if let shown {
             picture = shown

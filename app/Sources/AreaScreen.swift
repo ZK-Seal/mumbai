@@ -235,7 +235,7 @@ struct AreaScreen: View {
         .presentationBackground(Theme.background)
     }
 
-    /// The photo with the tiles, the area that takes the finger, and the finger's line on top.
+    /// The photo with the yellow face, the area that takes the finger, and the finger's line on top.
     /// The line shows only while the finger is down.
     private func canvas(_ photo: PreparedPhoto) -> some View {
         Image(uiImage: preview ?? photo.image)
@@ -312,7 +312,7 @@ struct AreaScreen: View {
         guard let boxes = shape?.boxes else { return }
         let (image, cell) = (photo.image, Self.cell)
         previewTask = Task.detached(priority: .userInitiated) {
-            let drawn = AreaPreview.mosaic(image, boxes: boxes, cell: cell)
+            let drawn = AreaPreview.face(image, boxes: boxes, cell: cell)
             await MainActor.run {
                 guard !Task.isCancelled else { return }
                 preview = drawn
