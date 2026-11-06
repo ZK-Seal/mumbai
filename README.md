@@ -1,12 +1,296 @@
-# Blank Demo
+# zkSeal at ETHGlobal Mumbai
 
-An iPhone app that shows a proved edit of a photo. You draw around part of a photo. In the sealed picture that area is plain grey. A proof shows how the sealed picture follows from a signed original. The rest of the picture comes from that original, re-encoded at lower quality.
+An iPhone app, a web side and a gallery page. Together they show two things about an event's photos: what was changed, and how many people stand behind them.
+
+Demo link: TO FILL (Armanc): the public read-only link.
 
 Prototype, not audited.
 
-The app's screens do not explain any of this, so the facts are here.
+## The problem
+
+Anyone can edit a photo, and a viewer cannot tell what was changed. When part of a photo is covered, you usually have to take someone's word for what else changed.
+And at a protest, one person with several phones can make it look as if many people saw it.
+
+This demo answers two questions about an event's photos:
+
+- **What was changed?** Each picture is a proven edit of a signed original (our test key in this demo).
+- **How many people stand behind them?** Each picture was approved by one person through World, so the gallery can say "N photos from M people".
+
+This is a demo. It is never safe for real protesters. See "What is true in this demo".
+
+## One picture
+
+```text
+  THE APP, on the phone
+  1. Take a photo and draw over part of it
+         |  the photo and the area
+         v
+  THE BACKEND, closed, not in this repo
+  2. Turn the area grey, make the proof, check it
+         |  a plain copy of the sealed picture, a hash, a verdict
+         v
+  THE APP
+  3. Draw the cover on top. The person presses Publish
+     The first time: a nickname and a World proof     ---->  WORLD
+     Each photo: a World proof for this photo's hash  ---->  WORLD
+         |  the World proofs, then the picture with its cover
+         v
+  THE WEB SIDE
+  4. Check each proof with World
+  5. Make the person's name and the picture's name    ---->  ENS
+  6. Keep small records                               ---->  ARKIV
+  7. Keep the picture                                 ---->  SWARM
+
+  THE GALLERY PAGE, in any browser, with no server of ours
+  8. Read the records from ARKIV and the pictures from SWARM.
+     Show each event's photos and how many named people stand behind them.
+```
+
+## How the app and the web side work together
+
+| Part | Where | What it does |
+| --- | --- | --- |
+| App | `app/` | Takes the photo, draws the cover, opens the World ID app, and shows the result |
+| Backend | Closed, not in this repo | Seals the photo and checks the proof. It removes the files after the job |
+| Web side | `web/` | Checks World proofs, keeps records on Arkiv, keeps pictures on Swarm, and makes the names |
+| Gallery | `gallery/` | One page that reads Arkiv and Swarm from the browser and shows an event |
+| Contracts | `contracts/` | Registrars, written and fork-tested, not wired |
+
+1. **Seal.** The person draws over part of a photo. The backend seals it and returns a plain picture and a hash.
+2. **Publish, the first time.** The person chooses a nickname and proves through World that they are one human. The web side refuses a name that is taken, makes the name in the background, keeps a user row on Arkiv, and gives the app a session.
+3. **Publish, each photo.** If an event is set, the person scans a badge once for that event. The person approves the hash through World. The web side keeps a record on Arkiv, with the person's name found through the session. The app sends the picture with its cover. The web side puts it on Swarm, keeps a pointer on Arkiv, and makes the image's name.
+4. **Read.** The gallery page reads Arkiv and Swarm, and shows each event's images with their names and their people's names.
+
+## What each partner adds, and what its prize asks
+
+One section each. In the tables, **There** means it is done today. **Not there** means it is not done yet. TO FILL marks a fact only Armanc has.
+
+## ENS
+
+Prize: Best Integration of ENSv2 into an Existing Project.
+
+**How we use it.** ENS is used like a folder tree. People and pictures get ENS names, with records on them. A name under `users` exists only after our server has checked a person's World proof. A name under an event exists only after a named person approved that seal.
+
+```text
+<root>.eth
+├─ users.<root>.eth                        a name here = one World proof, one human
+│  ├─ <nickname>.users.<root>.eth  <---->  address A     name and address point to each other
+│  └─ <nickname>.users.<root>.eth  <---->  address B
+└─ events.<root>.eth
+   └─ ethglobal.events.<root>.eth          one registry for this event's pictures
+      ├─ image1.ethglobal...       ----->  address A     picture on Swarm, seal's hash, person's name
+      └─ image2.ethglobal...       ----->  address B
+```
+
+Once the root switch is real, a person's name is `<nickname>.users.zk-seal.eth`. That switch is not there yet: `zk-seal.eth` is registered on mainnet, and the tree is not under it. The web side's root is one setting, `DESK_NAME`, with `armanc.eth` as its default. The app shows whatever name the web side returns.
+
+**What it adds to the project.**
+
+- The tree itself says what passed the checks. Anyone can read it without asking us.
+- A person and a picture each get a name a reader can use, in place of a long hash.
+- In ENSv2 a name can have its own registry. So each level here is its own contract: one registry for people, one for events, and one for each event's pictures. A new event is one new registry, and its names stay apart from every other event's.
+- One resolver of ours holds the records: the Swarm reference, the seal's hash and the person's name. So a name leads to its picture.
+- A person's address points back to their name as a true ENS primary name, set through the default reverse registrar. So a wallet or a site can show it.
+- The root's owner wallet holds every role on each registry, so it can take any part over at any time.
+
+**What its prize asks for, and where each ask is met.**
+
+| The prize asks for | Where | State |
+| --- | --- | --- |
+| "Integration must use ENSv2 on Ethereum mainnet" | `web/src/lib/tree.ts`. The tree ran on a local fork of mainnet, with a phone and no real money | **Not there** on mainnet. TO FILL (Armanc): which names, under which root, and one link |
+| "integrate it into an existing project" | zkSeal is the existing project. The tree is in `web/src/lib/tree.ts` | There |
+| "It should be clear how ENSv2 improves the project" | "What it adds to the project", above | There |
+| "not just include hard-coded values" | A name comes from a real check: `registerUser` in `web/src/lib/tree.ts`. The gallery starts from six names, and each shows as real only with a row on Arkiv. Any other name found in a real row is listed after them | There in the code. **Not there** on mainnet |
+| "must have a link to a live demo" | The demo link at the top | **Not there** |
+| "code needs to be open source and accessible on Github" | This repo, under MIT | There |
+
+**Its limits.**
+
+- Our server is the registrar. It checks World, then our bot wallet makes the name. No contract makes that check today.
+- Our server derives each person's key from their pass and a server secret, so it can sign for every person. In the intended design the key stays on the phone.
+- An event's ENS name opening the gallery page: **not there**.
+- A name that was never registered can still answer through the parent's resolver. So read "exists" from the owner, in the registry, not from a resolver answer.
+
+## Arkiv
+
+Prize: Build on Arkiv (existing projects).
+
+**How we use it.** Arkiv holds our small records, in four kinds of read-only row: users, approvals, picture pointers and image names. Our web server's wallet writes them all. The gallery page and the web side's event page read them. Every read keeps only rows our wallet created read-only. Before the event, nothing here used Arkiv. Everything on Arkiv is new.
+
+**What it adds to the project.**
+
+- Anyone can list an event's records with a public query, without our server and without our permission. If our server stops, the records can still be read until they expire.
+- Another app can build its own gallery from the same records.
+- Records are read-only from the moment they are written, and anyone can see that flag. We cannot change a field later. We can still delete a record, extend it or hand it over.
+- Each row shows the wallet that created it, so a reader can ignore rows from any other wallet.
+- A record stops showing up after 30 days, with no job on our side.
+
+**The wallet, the rows and one query.**
+
+- Wallet that wrote the entities: `0x37D7D1bDA05129eBCb6e99Aa4ae106e8B75088eB`. TO FILL (Armanc): confirm it is the final wallet.
+- Wallet in the explorer: https://rabdi.explorer.arkiv.network/address/0x37D7D1bDA05129eBCb6e99Aa4ae106e8B75088eB
+- Seal record: https://rabdi.explorer.arkiv.network/entity/0x6a8bb67138a6578b57752251f2ce80ed6fda5975ddd69836fab04395329c2b19
+- Picture pointer: https://rabdi.explorer.arkiv.network/entity/0xfbe9f25e53427482e4441239a1fe3bd8a080df75f5fcd5302dcbff24bef5d70a
+
+One query you can run. It needs no key:
+
+```bash
+curl https://rpc.rabdi.db-chain.testnet.arkiv.network \
+  -H "content-type: application/json" \
+  --data @- <<'EOF'
+{"jsonrpc":"2.0","id":1,"method":"arkiv_query","params":[
+ "event = str('test-run-a') AND $creator = addr(0x37D7D1bDA05129eBCb6e99Aa4ae106e8B75088eB)",
+ {"select":{"key":true,"creator":true,"expiresAt":true,"creationFlags":true,"attributes":true},"limit":"0xa"}]}
+EOF
+```
+
+You should see six rows, of two kinds. These are test rows. TO FILL (Armanc): the demo event's name and rows.
+
+**What its prize asks for, and where each ask is met.**
+
+| The prize asks for | Where | State |
+| --- | --- | --- |
+| "An existing project in ETHGlobal's Continuity batch" | On ETHGlobal's form, not in this repo | TO FILL: confirm on the form |
+| "The Arkiv part is new work done at ETHGlobal Mumbai" | The first Arkiv commit, 06.11.2026, in `web/src/lib/arkiv.ts` | There |
+| The README says "what existed before the event and what you added" | "Old work and new work", below | There |
+| Writes to the current testnet | `web/src/lib/arkiv.ts`, on Arkiv's Rabdi testnet | There, with test rows |
+| "at least one feature users see reads its data from Arkiv" | `eventPhotos` in `web/src/lib/records.ts`, and `kindQuery` in `gallery/index.html` | There in the code. **Not there** on a link a judge can open |
+| The README gives "the wallet address(es) that wrote your entities" | Above | There |
+| The README gives "one query we can run" | Above | There, on test rows |
+| `schema.md`, `friction.md`, `reach.md`, `why-arkiv.md`, `how-you-use-arkiv.md` | `/arkiv/` | **Not there** yet |
+| Answers "with links, numbers or a query we can run", from real rows | `/arkiv/` | **Not there**. Only test rows exist, under `test-run-a` and `test-run-b` |
+| "A public repo with an open-source license" | This repo, under MIT | There |
+| A statement of how tools were used, which ETHGlobal's rules ask for | This README and the form | **Not there**. The team writes it |
+
+## Swarm
+
+Prize: the Arkiv + Swarm bonus (existing projects).
+
+**How we use it.** Swarm holds the picture files: the plain picture with its cover, as a JPEG, never the sealed file. The `ref` field of a `blank-demo.pictures` row on Arkiv holds the Swarm reference. The gallery fetches the picture from Swarm's gateways in the browser. No Swarm code existed before the event.
+
+**What it adds to the project.**
+
+- An Arkiv row is small: its binary data is limited to 128 KiB, and our pictures can reach 3 MiB. So the file goes to Swarm, and Arkiv keeps where it is and its hash.
+- Anyone can fetch a picture from Swarm without our server, and compare it with the hash on Arkiv.
+
+**Its limit.** We use the public gateway. We own no batch and did not buy one, so the gateway stores the file with its own stamp. How long it keeps a file is not promised, so a pointer can outlive its picture.
+
+**What its prize asks for, and where each ask is met.**
+
+| The prize asks for | Where | State |
+| --- | --- | --- |
+| "uses both Arkiv and Swarm" | The picture on Swarm, the pointer on Arkiv | There |
+| `swarm.md` | `/arkiv/swarm.md` | **Not there** yet |
+| "say what existed before the event" | "Old work and new work", below, and the line above | There |
+| "which entity field holds the Swarm reference" | `ref` on `blank-demo.pictures`, in `web/src/lib/arkiv.ts` | There |
+| "One Arkiv entity key and the Swarm reference it points to, with a link" | The key is the picture pointer in the Arkiv section | **Not there**. TO FILL (Armanc): the Swarm reference |
+| "postage stamp batch ID" and "the wallet that bought it (or who gave you the batch)" | `web/src/lib/swarm.ts` sends 64 zeros, and the gateway uses its own stamp | **Not there**. We own no batch |
+| "the Bee node or service you uploaded through" | The public gateway, `https://api.gateway.ethswarm.org`, in `web/src/lib/swarm.ts` | There |
+| "The files in your repo that upload to Swarm and read from it" | Upload: `uploadPicture` in `web/src/lib/swarm.ts`, and `web/src/app/api/picture/[hash]/route.ts`. Read: `gallery/index.html`, and `web/src/app/event/[event]/page.tsx` | There |
+| Steps for one upload and one read, and "what we should see" | `/arkiv/swarm.md` | **Not there**. The real output is not pasted yet |
+| "The moment in your demo video where Swarm is used" | The video | **Not there**. It is not filmed yet |
+| "What got in your way with Swarm" | `/arkiv/swarm.md` | **Not there** yet |
+| Never store an encrypted reference in an entity | `isSwarmRef` in `web/src/lib/swarm.ts` takes plain 64-hex references only | There |
+
+## World
+
+Prize: [Cont] Best Use of IDKit.
+
+**How we use it.** The Publish button asks for Proof of Human, once to get a name and once for each photo. The app opens the World ID app through World's Swift package, IDKit, pinned to 4.2.0. The web side checks each proof with World before it writes anything (`web/src/lib/world.ts`).
+
+**What it adds to the project.** Without World, one person with several phones looks like a crowd. With it, a page can count how many people stand behind an event's photos, and it does not need to know who they are.
+
+**The moment that needs trust.** A photo joins an event's public list, and the page counts how many people stand behind the photos. We need to know one human stands behind a name. We do not need to know who they are.
+
+**The credential.** Proof of Human. Why it is the least that is enough: TO FILL (Armanc).
+
+**What it proves.** "Approved by a unique human", not "taken by". The identities in this demo are test identities.
+
+**One action per photo.** The World app makes one proof per person and action, and refuses a second. So each photo has its own action, drawn from its hash. A session from our server ties the photo to the named person. That link is our server's word.
+
+**The other path.** A cancelled or refused proof shows "Not authorised" with World's word. The picture is not sent, and no name is made.
+
+**Debrief.**
+
+- Time to first success: TO FILL (Armanc).
+- Friction: the simulator accepted a second proof for one action, but the World app refuses it with `nullifier_replayed`. We found this only on a real phone, then gave each photo its own action. One sandbox account showed "V4 protocol and credential issuance must both be enabled for this account" and could not be used. A new sandbox credential took up to an hour. Two proofs sent at the same instant: one was refused, then the same proof was accepted a moment later.
+- Missing: TO FILL (Armanc).
+- The one improvement with the greatest impact: TO FILL (Armanc).
+
+**What its prize asks for, and where each ask is met.**
+
+| The prize asks for | Where | State |
+| --- | --- | --- |
+| "Integrate IDKit in a functioning application" | `app/Sources/WorldStep.swift`. A photo's World proof passed on a phone, before the steps moved to Publish | There in the code. The Publish path has not run yet |
+| "verify the result on the server or onchain" | On the server: `web/src/lib/world.ts`. A contract for it is written, not wired | There, on the server |
+| "the specific product event requiring trust" | "The moment that needs trust", above | There |
+| "the minimum sufficient assurance" | "The credential", above | **Not there**. TO FILL (Armanc) |
+| "Demonstrate a successful verification" | The video | **Not there**. It is not filmed yet |
+| "one meaningful alternative path" | `app/Sources/ResultScreen.swift` shows "Not authorised" with World's word | There in the code. **Not there** in the video |
+| Debrief: "friction encountered" | "Debrief", above | There |
+| Debrief: "time to first success" | "Debrief", above | **Not there**. TO FILL (Armanc) |
+| Debrief: "missing capability or documentation", and "the one improvement" | "Debrief", above | **Not there**. TO FILL (Armanc) |
+
+## Old work and new work
+
+| | What | Where |
+| --- | --- | --- |
+| **Old, before the event** | zkSeal itself: an older private product that proves how an edited photo follows from a signed original, with the proved grey edit. The zkSeal logo. The design of our earlier app | The product is not in this repo. The logo files are |
+| **New at ETHGlobal Mumbai, open** | The app, the web side, the gallery page, the contracts, and all use of World, ENS, Arkiv and Swarm | This repo. Its first commit is from 05.11.2026 |
+| **New at ETHGlobal Mumbai, closed** | A service that runs the older product for the app | Not in this repo, because it uses that private product. The app talks to it over HTTP with an access word |
+
+## What is true in this demo
+
+**The gallery page does not say these, so they are here.**
+
+- Covers are drawn by the app and not proved.
+- It is not a privacy guarantee.
+- A name is a linkable pseudonym, not a real identity.
+- Our server holds the address keys and is the gate.
+- A picture's link to its seal is the uploader's word.
+
+**What a seal is.** A seal shows a proven edit of a signed original (our test key in this demo). Our test key signs, not a camera. So it does not show that a camera took the photo.
+
+**It is not zero knowledge.** The demo runs in plain mode. Edits under zero knowledge are in progress.
+
+**Who decides.**
+
+- The registrar is our server, not a contract. The server checks the World proof with World, then our bot wallet makes the name.
+- The contracts are written and fork-tested, not wired. The live path does not send through them. Their check is a signature from a key on our server, not a check of the proof. A contract that checks a World proof itself is written for later.
+- No contract checks a seal's proof. That proof's size and cost rule it out on mainnet today.
+- The backend checks the seal. The web server cannot see the sealed file.
+- An image's name means this: a named person's World proof is bound to this seal's hash, and that person sent this picture.
+- The authorise page checks only the hash's format, so anyone can type a made-up hash and authorise it.
+- The app sends a ticket from the backend, and the web side does not read it.
+- The badge check is in the phone only. See "A badge for an event".
+
+**What can be traced.**
+
+- One person has one name and one pass, and they link all that person's photos across events, by design.
+- The pass is in a public text record, and names stay on a public chain.
+- **This is never safe for real protesters.** Anyone who learns who is behind one name can see all that person's photos.
+
+**Photos with no session.** The gallery shows them as unnamed and does not count them as people. The web side's own event page does not do this yet: there, each such photo counts as one person.
+
+**What is only for this demo.**
+
+- Our test key signs the photo.
+- The World identities are test identities.
+- The keys are custodial, as above.
+- Swarm is used through the public gateway, with no batch of our own. How long it keeps a file is not promised.
+- Arkiv is a testnet, and a record lives for 30 days.
+
+**What can go wrong when it runs.**
+
+- A lost or rotated bot key changes every user address, and the tree then reads as not set up.
+- Rotating the World signing key voids every session and picture token.
+- World's mode is staging unless `WORLD_ENVIRONMENT` says otherwise. Set it on every deployment.
+- The bot's queue lives in one process.
+- Without an Arkiv access key, each write takes about 10 s more.
 
 ## What the app does
+
+The app's screens do not explain any of this, so the facts are here.
 
 1. You take a photo, or choose one. The app draws it at 2600 px on its long side at most.
 2. You draw a closed shape with a finger. A thin line follows the finger. When the finger lifts, the line goes away and the shape grows out to a 16 px grid, so the grid cells cover all of it. Two fingers zoom in, up to 5 times, and move the photo, and two quick taps go back. Lines land on the same grid at any zoom. A line too small to hold a cell adds nothing. You can draw more shapes: overlapping ones join, "Undo" removes the last one and "Clear" removes them all.
@@ -15,23 +299,25 @@ The app's screens do not explain any of this, so the facts are here.
 5. The answer is a plain copy of the sealed picture, a hash and a verdict. The picture appears only after the check passed and the whole answer matches what the app sent. Any other answer shows one fixed line and no picture. The screen shows no line saying it passed. The sealed file cannot be downloaded. The backend removes it and the photo after the picture is fetched, or after 600 s if it is never fetched. A service stop in that window can leave them until the next start.
 6. After a result, "Start over" also takes the photo off the screen.
 
-## The button
+## The Publish button
 
-"Authorise this seal" shows with the picture, only if a web address is set. The address comes from Settings or from `WEB_URL` at launch, and it is not in this repo.
-If the web side is ready, the button goes to the World app and back, with no page between, through World's IDKit package, pinned to 4.2.0. The package's result goes to the web side unchanged. "Authorised" shows only after the web side answers that it verified the result, or answers with a record for this hash. A refusal or a failure shows "Not authorised", and the button stays.
+"Publish on zk-seal.eth" shows under "Start over", with the picture, only if a web address is set. The picture shows only after the seal's check passed. The address comes from Settings or from `WEB_URL` at launch, and it is not in this repo.
+Its words name the root the tree is moving to. Until that switch is real, names go under `armanc.eth`, and the app shows the name the web side returns.
+Pressing it runs these in order: the nickname, if the person has no name yet; the badge, if an event needs one; then the photo's World step.
+If the web side is ready, the World step goes to the World app and back, with no page between, through World's IDKit package, pinned to 4.2.0. The package's result goes to the web side unchanged. "Authorised" shows only after the web side answers that it verified the result, or answers with a record for this hash. A refusal or a failure shows "Not authorised", and the button stays.
 If the web side cannot be read or the World app cannot be opened, it opens that page in a sheet inside the app.
 It sends the hash, the edit, the size and `from=app` to that page, in the link, with no photo. It also sends an event's short name, set in Settings or with `EVENT_SLUG` at launch, but only if it is 3 to 40 lowercase letters, digits and hyphens, with no hyphen first.
 The page comes back through a `blankdemo://` link, and the app does not trust that link alone. "Authorised" shows only if the link names this hash and the web side then answers with a record for it. Anything else shows "Not authorised", and the button stays.
 
 ## Your name
 
-Once, before the first authorising, and at any time from Settings, the app asks for a short name of 3 to 20 lowercase letters, digits or hyphens. The person proves in the World app that they are one human, and the web side checks that and makes an ENS name for them, in the background. The app keeps the name on the phone and shows "name being created" until the web side says it is done. If the World app cannot be opened from here, the app opens the web side's join page in a sheet, and believes the page's way back only when the web side then lists the name.
+On the first Publish, and at any time from Settings, the app asks for a nickname of 3 to 20 lowercase letters, digits or hyphens. Closing that step goes back to the button, and nothing is sent. The person proves in the World app that they are one human, and the web side checks that and makes an ENS name for them, in the background. The app keeps the name on the phone and shows that it is being created until the web side says it is done. If the World app cannot be opened from here, the app opens the web side's join page in a sheet, and believes the page's way back only when the web side then lists the name.
 The registrar is our server, not a contract. The name goes on a public chain and stays there, and it links that person's photos across events.
 When the web side is making an ENS name for a picture, the result shows "name being created" under "Authorised", then the name. If it is still not done after about 90 s, the app asks once more with the same token.
 
 ## A badge for an event
 
-If an event is set, the app scans an ETHGlobal badge's QR code with the camera before the first photo goes to that event. It accepts only an https link on ETHGlobal's own hosts, `ethglob.al` and `ethglobal.com`. The phone follows that link once, with no cookies, and passes the badge only if it lands on a page under `ethglobal.com`, not on the site's front page. It never shows or keeps the link or the page. It sends only the link's SHA-256 to the web side, as `entry`.
+If an event is set, the app scans an ETHGlobal badge's QR code with the camera before the first photo's World step for that event. It accepts only an https link on ETHGlobal's own hosts, `ethglob.al` and `ethglobal.com`. The phone follows that link once, with no cookies, and passes the badge only if it lands on a page under `ethglobal.com`, not on the site's front page. It never shows or keeps the link or the page. It sends only the link's SHA-256 to the web side, as `entry`.
 This is the phone's own check. The web side does not check the badge today, so anyone can get past it without the app. It shows only where the link lands, so a code that links straight to another ETHGlobal page passes too. It does not show that the person holds the badge: a badge is worn in public, and anyone who photographs it can copy the link. The link holds a short code, so its SHA-256 can be guessed. It is not a secret.
 
 ## The picture after authorising
@@ -51,7 +337,9 @@ Both are drawn by the app. What you see in the area is made up. Neither is in th
 
 ## How to build it
 
-You need Xcode and [XcodeGen](https://github.com/yonaskolb/XcodeGen).
+### The app
+
+You need Xcode and [XcodeGen](https://github.com/yonaskolb/XcodeGen). The project file keeps an older working name.
 
 ```sh
 cd app
@@ -64,6 +352,36 @@ Choose your own signing team in Xcode, then run on a phone with iOS 17 or later.
 The app needs the backend's address and an access word. Enter them under Settings in the app, or set `SERVICE_URL` and `SERVICE_WORD` when you launch it. Neither is in this repo. Without the backend you can still draw and see the cover, but you cannot send.
 
 The app allows plain HTTP on a local network, for the backend and for the web address. Over plain HTTP the photo, the access word and the picture are not encrypted, so use a link you trust. With a plain HTTP web address the app never opens the sheet or the join page, because those pages need a secure address.
+
+### The web side
+
+```sh
+cd web
+npm install
+npm run dev
+```
+
+Its settings are environment variables, read in `web/src/lib/`. No key is in this repo. The read-only link runs with `ARKIV_OWNER` set and no key.
+
+### The gallery page
+
+`gallery/index.html` is one file. Open it in a browser. It reads Arkiv and Swarm by itself.
+
+### The contracts
+
+```sh
+cd contracts
+./install-deps.sh
+forge test
+```
+
+The fork tests read mainnet through `ETH_RPC_URL`, or through a public node.
+
+## What is not in this repo
+
+- The backend and the older product it runs.
+- The backend's address and access word, and every key.
+- Any photo or sealed file.
 
 ## Fonts
 
