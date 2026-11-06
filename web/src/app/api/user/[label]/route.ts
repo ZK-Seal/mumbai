@@ -2,7 +2,7 @@ import { after } from "next/server";
 import { addressOf, createUserName, userEns } from "@/lib/naming";
 import {
   imageState,
-  isLabel,
+  normalLabel,
   pictureLink,
   records,
   type PassSeal,
@@ -25,15 +25,26 @@ function retryName(user: UserRecord): void {
   after(() => createUserName(user.label, user.pass));
 }
 
+/** A path segment as the person wrote it: decoded once more if it still holds escapes. */
+function decoded(segment: string): string {
+  if (!segment.includes("%")) return segment;
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
+}
+
 /**
- * Says whether a label is a person's name, whether that name is on chain yet, and which seals the
+ * Says whether a label is a person's name (the label is normalised first, see normalLabel), whether that name is on chain yet, and which seals the
  * person authorised, newest first (at most PASS_LIST_LIMIT), each with its event, picture and the
  * photo's own name (as the seal answer gives it), and the person's own address, which holds their
  * names on chain. The pass is not given. A name not on chain yet is asked for again (see retryName).
  */
 export async function GET(_request: Request, { params }: { params: Promise<{ label: string }> }) {
-  const { label } = await params;
-  if (!isLabel(label)) return Response.json({ state: "none" }, { status: 404, headers });
+  const { label: given } = await params;
+  const label = normalLabel(decoded(given));
+  if (label === null) return Response.json({ state: "none" }, { status: 404, headers });
   let user: UserRecord | null;
   let images;
   try {

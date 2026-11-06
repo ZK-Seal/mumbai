@@ -24,7 +24,7 @@ import {
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { mainnet } from "viem/chains";
-import { normalize, packetToBytes } from "viem/ens";
+import { packetToBytes } from "viem/ens";
 import {
   ALL_ROLES,
   FACTORY,
@@ -41,6 +41,7 @@ import {
   deskPlace,
   ethClient,
   labelHash,
+  readLabel,
   registryAbi,
   REGISTERED,
 } from "@/lib/ens";
@@ -170,16 +171,9 @@ export function imageName(event: string, label: string): string {
 
 /** One label in normal form, or a "taken" error: a label that cannot be a name is not free. */
 function cleanLabel(value: string): string {
-  let label: string;
-  try {
-    label = normalize(value.trim());
-  } catch {
-    throw new TreeError("taken", "not a label");
-  }
-  if (!/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(label)) {
-    throw new TreeError("taken", "not a label");
-  }
-  return label;
+  const read = readLabel(value);
+  if (!("label" in read)) throw new TreeError("taken", "not a label");
+  return read.label;
 }
 
 function dns(name: string): Hex {

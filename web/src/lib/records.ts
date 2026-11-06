@@ -2,7 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { mkdir, readdir, readFile, link, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { ArkivStore, arkivSettings } from "@/lib/arkiv";
-import { normalName } from "@/lib/ens";
+import { normalName, readLabel } from "@/lib/ens";
 import type { Credential } from "@/lib/world";
 import { isSwarmRef, pictureUrl } from "@/lib/swarm";
 import { isSealHash } from "@/lib/world";
@@ -111,15 +111,40 @@ export function isAddress(value: unknown): value is string {
 }
 
 /**
- * A label someone may choose: 3 to 20 lowercase letters, digits and dashes, not one of ours, and
- * no "--" as its third and fourth characters, which ENS names keep for encoded labels.
+ * A label someone may choose, as given: any single ENS label once trimmed and normalised
+ * (ENSIP-15, which lowercases), at most 63 bytes, not one of ours, and not a wallet address
+ * or a long hex string. Answers the label in normal form, or why it cannot be one.
  */
+export function readUserLabel(value: unknown): { label: string } | { problem: string } {
+  const raw = typeof value === "string" ? value.trim() : "";
+  if (looksLikeAddress(raw)) return { problem: "A wallet address cannot be a name." };
+  const read = readLabel(raw);
+  if (!("label" in read)) return read;
+  if (looksLikeAddress(read.label)) return { problem: "A wallet address cannot be a name." };
+  if (RESERVED_LABELS.has(read.label)) return { problem: "This name is kept for the site." };
+  return read;
+}
+
+/** A label someone may choose, in normal form, or null if it cannot be one (see readUserLabel). */
+export function normalLabel(value: unknown): string | null {
+  const read = readUserLabel(value);
+  return "label" in read ? read.label : null;
+}
+
+/** Why a label cannot be chosen, in words for the person, or null when it can. */
+export function labelProblem(value: unknown): string | null {
+  const read = readUserLabel(value);
+  return "problem" in read ? read.problem : null;
+}
+
+/** A label someone may choose that is in normal form already. */
 export function isLabel(value: unknown): value is string {
-  return (
-    typeof value === "string" &&
-    /^(?!..--)[a-z0-9][a-z0-9-]{2,19}$/.test(value) &&
-    !RESERVED_LABELS.has(value)
-  );
+  return typeof value === "string" && normalLabel(value) === value;
+}
+
+/** A wallet address, or a bare hex string as long as one. */
+function looksLikeAddress(value: string): boolean {
+  return /^0x[0-9a-fA-F]{40}$/.test(value) || /^(0x)?[0-9a-fA-F]{40,}$/.test(value);
 }
 
 /** Labels that name a branch of the tree, or would look like ours. */
@@ -424,6 +449,17 @@ function isKey(value: string): boolean {
   return /^[0-9a-z][0-9a-z-]{0,63}$/.test(value);
 }
 
+/**
+ * The file name a label is kept under: the label itself when it is plain (ASCII letters, digits,
+ * dashes), else "zz--" and 60 hex characters of its SHA-256. No label in normal form has "--" as
+ * its third and fourth characters, so the two kinds never meet, and a file system that ignores
+ * case or accents never sees two names it would take as one.
+ */
+function labelKey(label: string): string {
+  if (isKey(label)) return label;
+  return `zz--${createHash("sha256").update(label).digest("hex").slice(0, 60)}`;
+}
+
 /** The file name a pass is kept under: its SHA-256, so any pass makes a short, safe name. */
 function passKey(pass: string): string {
   return createHash("sha256").update(pass).digest("hex");
@@ -473,7 +509,8 @@ async function writeOnce(dir: string, key: string, text: string): Promise<boolea
 /**
  * Keeps each record as its own JSON file, named by the seal's hash, and each picture pointer the
  * same way in a directory of its own. The first record, and the first pointer, for a hash wins.
- * Each user is a file named by its label, with a second copy named by a hash of its pass.
+ * Each user is a file named by its label (see labelKey), with a second copy named by a hash of its
+ * pass.
  */
 export class FileStore implements RecordStore {
   constructor(
@@ -593,7 +630,7 @@ export class FileStore implements RecordStore {
 
   async userByLabel(label: string): Promise<UserRecord | null> {
     if (!isLabel(label)) return null;
-    const user = keptUser(parsed(await readKept(path.join(this.userDir, "label"), label)));
+    const user = keptUser(parsed(await readKept(path.join(this.userDir, "label"), labelKey(label))));
     return user?.label === label ? user : null;
   }
 
@@ -619,13 +656,13 @@ export class FileStore implements RecordStore {
     if (kept) return kept;
     const text = JSON.stringify(fresh);
     const labels = path.join(this.userDir, "label");
-    if (!(await writeOnce(labels, fresh.label, text))) {
+    if (!(await writeOnce(labels, labelKey(fresh.label), text))) {
       const other = await this.userByLabel(fresh.label);
       if (!other) throw new StoreError();
       return other;
     }
     if (await writeOnce(path.join(this.userDir, "pass"), passKey(fresh.pass), text)) return fresh;
-    await unlink(path.join(labels, `${fresh.label}.json`)).catch(() => {});
+    await unlink(path.join(labels, `${labelKey(fresh.label)}.json`)).catch(() => {});
     const other = await this.userByPass(fresh.pass);
     if (!other) throw new StoreError();
     return other;

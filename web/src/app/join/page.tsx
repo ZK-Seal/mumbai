@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import { appReturnBase } from "@/lib/app-return";
-import { isLabel } from "@/lib/records";
+import { normalLabel } from "@/lib/records";
 import { treeRoot } from "@/lib/tree";
 import { Join } from "./join";
 
@@ -21,7 +21,7 @@ async function JoinPart({ searchParams }: { searchParams: Promise<Query> }) {
   return (
     <Join
       root={root}
-      label={isLabel(query.label) ? query.label : ""}
+      label={normalLabel(query.label) ?? ""}
       toApp={fromApp ? appReturnBase() : null}
     />
   );

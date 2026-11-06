@@ -1,6 +1,6 @@
 import { after } from "next/server";
 import { addressOf, createUserName, userEns } from "@/lib/naming";
-import { isLabel, records, type UserRecord } from "@/lib/records";
+import { readUserLabel, records, type UserRecord } from "@/lib/records";
 import { treeRoot, userName, userTaken } from "@/lib/tree";
 import {
   boundNullifier,
@@ -27,15 +27,17 @@ function registered(config: WorldConfig, user: UserRecord, ens: "pending" | "don
   });
 }
 
-function refused(reason: string, status: number, label: unknown) {
+function refused(reason: string, status: number, label: unknown, text?: string) {
   const labelText = typeof label === "string" ? label.slice(0, 32) : "-";
   console.log(`user/register: refused ${reason} label=${labelText}`);
-  return Response.json({ state: "refused", reason }, { status });
+  return Response.json({ state: "refused", reason, ...(text ? { text } : {}) }, { status });
 }
 
 /**
  * Gives a person a name of their own, <label>.users.<root>, for a World proof made for
- * `user:<label>` with the join action. Every answer is a word from a short fixed list.
+ * `user:<label>` with the join action. The label is normalised first (see readUserLabel), so a
+ * client that sends the form the person typed binds to the same signal as request gave. Every
+ * answer is a word from a short fixed list.
  *
  * One person keeps one name: a pass that has a name already gets that name back, and no new one.
  * A label kept for another pass, or already on chain, is `taken`. A new name is kept in the store
@@ -46,11 +48,12 @@ export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as
     | { label?: unknown; result?: unknown }
     | null;
-  if (!isLabel(body?.label)) return refused("label", 400, body?.label);
-  const label = body.label;
+  const read = readUserLabel(body?.label);
+  if (!("label" in read)) return refused("label", 400, body?.label, read.problem);
+  const label = read.label;
   const config = worldConfig();
   if (!config || !treeRoot()) return refused("not-set-up", 503, label);
-  const nullifier = boundNullifier(body.result, userSignal(label), config, config.joinAction);
+  const nullifier = boundNullifier(body?.result, userSignal(label), config, config.joinAction);
   if (nullifier === null) return refused("not-this-name", 422, label);
   // World takes one proof per person for the join action, so every refusal that does not need
   // the proof checked is made before World is asked: a proof World accepted is never wasted.
@@ -65,7 +68,7 @@ export async function POST(request: Request) {
   if (!mine && (held || (await userTaken(label).catch(() => false)))) {
     return refused("taken", 409, label);
   }
-  if (!(await worldAccepts(body.result, config, config.joinAction))) {
+  if (!(await worldAccepts(body?.result, config, config.joinAction))) {
     return refused("not-verified", 422, label);
   }
   if (mine) {

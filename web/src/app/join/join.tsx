@@ -21,23 +21,21 @@ type Phase =
   | { name: "open"; ready: Ready; label: string; signal: string }
   | ({ name: "registered" } & Registered)
   | { name: "taken"; label: string }
+  | { name: "refused"; text: string }
   | { name: "denied" }
   | { name: "not-set-up" };
-
-const RESERVED = new Set(["users", "events", "www", "admin"]);
 
 /** How often, and for how long, the page asks whether the name is on chain yet. */
 const POLL_MS = 5000;
 const POLL_FOR_MS = 120000;
 
-/** Why a label cannot be taken, or null when it can. */
+/**
+ * Why a label cannot be taken, as far as the page can tell, or null. The server has the whole
+ * rule (any one ENS label once normalised, see readUserLabel) and says why when it refuses.
+ */
 function labelProblem(label: string): string | null {
-  if (label.length < 3) return "At least 3 characters.";
-  if (label.length > 20) return "At most 20 characters.";
-  if (!/^[a-z0-9-]+$/.test(label)) return "Only lowercase letters, digits and dashes.";
-  if (label.startsWith("-")) return "Starts with a letter or a digit.";
-  if (label.slice(2, 4) === "--") return "No two dashes as the third and fourth characters.";
-  if (RESERVED.has(label)) return "This name is kept for the site.";
+  if (label.includes(".")) return "No dots: a name is one part.";
+  if (/^(0x)?[0-9a-fA-F]{40,}$/.test(label)) return "A wallet address cannot be a name.";
   return null;
 }
 
@@ -45,7 +43,7 @@ function labelProblem(label: string): string | null {
 function readRegistered(answer: unknown): Registered | null {
   const a = answer as { state?: unknown; name?: unknown; address?: unknown; ens?: unknown } | null;
   if (a?.state !== "registered" || typeof a.name !== "string") return null;
-  if (!/^(?!..--)[a-z0-9][a-z0-9-]{2,19}\.[a-z0-9.-]{3,200}$/.test(a.name)) return null;
+  if (a.name.length > 255 || a.name.indexOf(".") < 1 || /\s/.test(a.name)) return null;
   const ens = a.ens === "done" ? "done" : a.ens === "pending" ? "pending" : null;
   if (ens === null) return null;
   const address =
@@ -107,9 +105,21 @@ export function Join(props: {
       setPhase({ name: "denied" });
       return;
     }
-    const word = reply as { state?: unknown; reason?: unknown; signal?: unknown } | null;
+    const word = reply as {
+      state?: unknown;
+      reason?: unknown;
+      text?: unknown;
+      label?: unknown;
+      signal?: unknown;
+    } | null;
+    // From here on the label is the server's normal form of what was typed.
+    const held = typeof word?.label === "string" && word.label !== "" ? word.label : label;
     if (word?.state === "taken") {
-      setPhase({ name: "taken", label });
+      setPhase({ name: "taken", label: held });
+      return;
+    }
+    if (word?.reason === "label" && typeof word.text === "string") {
+      setPhase({ name: "refused", text: word.text });
       return;
     }
     if (word?.reason === "not-set-up") {
@@ -117,10 +127,10 @@ export function Join(props: {
       return;
     }
     const ready = readReady(reply);
-    const signal = `user:${label}`;
+    const signal = `user:${held}`;
     setPhase(
       ready && word?.signal === signal
-        ? { name: "open", ready, label, signal }
+        ? { name: "open", ready, label: held, signal }
         : { name: "denied" },
     );
   }
@@ -178,7 +188,7 @@ export function Join(props: {
             </p>
           )}
           <p className="soft">
-            <a href={`/api/user/${phase.label}`}>Your photos</a>
+            <a href={`/api/user/${encodeURIComponent(phase.label)}`}>Your photos</a>
           </p>
           {toApp && (
             <div className="actions">
@@ -195,17 +205,20 @@ export function Join(props: {
       ) : (
         <>
           <label className="field">
-            <span>Your name (3 to 20 lowercase letters, digits and dashes)</span>
+            <span>Your name (any name ENS allows, one part, no spaces)</span>
             <input
               type="text"
               name="label"
               autoComplete="off"
               autoCapitalize="none"
               spellCheck={false}
-              maxLength={20}
+              maxLength={100}
               placeholder="yourname"
               value={given}
-              onChange={(event) => setGiven(event.target.value.toLowerCase())}
+              onChange={(event) => {
+                setGiven(event.target.value);
+                if (phase.name === "refused") setPhase({ name: "idle" });
+              }}
               disabled={phase.name === "asking" || phase.name === "open"}
               aria-invalid={problem !== null}
             />
@@ -216,6 +229,11 @@ export function Join(props: {
           {phase.name === "taken" && (
             <p className="state bad" role="status">
               {phase.label}.users.{root} is taken. Try another name.
+            </p>
+          )}
+          {phase.name === "refused" && (
+            <p className="state bad" role="status">
+              {phase.text}
             </p>
           )}
           {phase.name === "denied" && (

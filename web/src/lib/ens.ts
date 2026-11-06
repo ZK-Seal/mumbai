@@ -70,6 +70,35 @@ export function normalName(value: unknown): string | null {
   return name;
 }
 
+/** The most bytes one ENS label may have here, as DNS allows. */
+export const LABEL_MAX_BYTES = 63;
+
+/**
+ * One label in ENS normal form (ENSIP-15), or why it cannot be one: trimmed, one part (no dot),
+ * accepted by normalisation, and at most LABEL_MAX_BYTES bytes. Normalisation lowercases.
+ */
+export function readLabel(value: unknown): { label: string } | { problem: string } {
+  const given = typeof value === "string" ? value.trim() : "";
+  if (given === "") return { problem: "Write a name." };
+  if (given.length > 4 * LABEL_MAX_BYTES) return { problem: tooLong };
+  if (/\s/.test(given)) return { problem: "No spaces." };
+  if (given.includes(".")) return { problem: "No dots: a name is one part." };
+  let label: string;
+  try {
+    label = normalize(given);
+  } catch {
+    if (given.slice(2, 4) === "--") {
+      return { problem: "No two dashes as the third and fourth characters." };
+    }
+    return { problem: "ENS does not allow this name." };
+  }
+  if (label === "" || label.includes(".")) return { problem: "ENS does not allow this name." };
+  if (Buffer.byteLength(label, "utf8") > LABEL_MAX_BYTES) return { problem: tooLong };
+  return { label };
+}
+
+const tooLong = `At most ${LABEL_MAX_BYTES} bytes: ${LABEL_MAX_BYTES} plain letters, fewer with accents or emoji.`;
+
 /** The desk this server speaks for: DESK_NAME, or the default. Null if it is not a name. */
 export function deskName(): string | null {
   return normalName(process.env.DESK_NAME || DEFAULT_DESK);
