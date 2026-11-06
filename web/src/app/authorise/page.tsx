@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { records } from "@/lib/records";
 import { isSealHash } from "@/lib/world";
 import { Authorise, type Edit } from "./authorise";
 
@@ -28,7 +29,16 @@ async function SealPart({ searchParams }: { searchParams: Promise<Query> }) {
   if (!seal) {
     return <p className="state bad">This link does not name a seal.</p>;
   }
-  return <Authorise hash={seal.hash} edit={seal.edit} width={seal.width} height={seal.height} />;
+  const kept = await records().get(seal.hash);
+  return (
+    <Authorise
+      hash={seal.hash}
+      edit={seal.edit}
+      width={seal.width}
+      height={seal.height}
+      pass={kept?.pass ?? null}
+    />
+  );
 }
 
 export default function AuthorisePage({ searchParams }: { searchParams: Promise<Query> }) {

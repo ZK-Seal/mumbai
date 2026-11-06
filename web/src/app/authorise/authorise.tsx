@@ -75,9 +75,19 @@ async function post(path: string, body: unknown): Promise<unknown> {
   return response.json().catch(() => null);
 }
 
-export function Authorise(props: { hash: string; edit: Edit; width: number; height: number }) {
+export function Authorise(props: {
+  hash: string;
+  edit: Edit;
+  width: number;
+  height: number;
+  /** The pass already on record for this seal, if a person authorised it before. */
+  pass: string | null;
+}) {
   const { hash } = props;
-  const [phase, setPhase] = useState<Phase>({ name: "idle" });
+  const [phase, setPhase] = useState<Phase>(() => {
+    const kept = readPass(props.pass);
+    return kept ? { name: "verified", pass: kept } : { name: "idle" };
+  });
   const pass = useRef<string | null>(null);
 
   async function start() {
@@ -90,7 +100,13 @@ export function Authorise(props: { hash: string; edit: Edit; width: number; heig
       setPhase({ name: "denied" });
       return;
     }
-    if ((answer as { reason?: unknown })?.reason === "not-set-up") {
+    const word = answer as { state?: unknown; reason?: unknown; pass?: unknown } | null;
+    const kept = word?.state === "authorised" ? readPass(word.pass) : null;
+    if (kept) {
+      setPhase({ name: "verified", pass: kept });
+      return;
+    }
+    if (word?.reason === "not-set-up") {
       setPhase({ name: "not-set-up" });
       return;
     }
