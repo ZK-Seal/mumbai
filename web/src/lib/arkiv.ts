@@ -718,6 +718,11 @@ export class ArkivStore implements RecordStore {
     return (await this.holding()).find((user) => user.pass === pass) ?? null;
   }
 
+  async usersByPasses(passes: string[]): Promise<UserRecord[]> {
+    const wanted = new Set(passes);
+    return (await this.holding()).filter((user) => wanted.has(user.pass));
+  }
+
   putUser(user: UserRecord): Promise<UserRecord> {
     return this.once(this.pendingUsers, user.label, () => this.writeUser(user));
   }

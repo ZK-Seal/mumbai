@@ -47,6 +47,8 @@ export interface RecordStore {
   userByLabel(label: string): Promise<UserRecord | null>;
   /** The user kept for this pass, or null. Throws a StoreError if unsure. */
   userByPass(pass: string): Promise<UserRecord | null>;
+  /** The users kept for any of these passes, in one look. Throws a StoreError if unsure. */
+  usersByPasses(passes: string[]): Promise<UserRecord[]>;
   /** The name kept for this seal's photo, or null. Throws a StoreError if unsure. */
   getName(hash: string): Promise<NameRecord | null>;
   /** Keeps the name unless the seal has one already. Returns whichever name is kept. */
@@ -306,7 +308,7 @@ export async function userNames(
   seals: EventSeal[],
 ): Promise<Map<string, GroupUser>> {
   const passes = [...new Set(seals.map((seal) => seal.pass))];
-  const users = await Promise.all(passes.map((pass) => store.userByPass(pass)));
+  const users = passes.length === 0 ? [] : await store.usersByPasses(passes);
   return new Map(
     users.flatMap((user) =>
       user ? [[user.pass, { name: user.name, address: user.address }] as const] : [],
@@ -599,6 +601,11 @@ export class FileStore implements RecordStore {
     if (!isPass(pass)) return null;
     const user = keptUser(parsed(await readKept(path.join(this.userDir, "pass"), passKey(pass))));
     return user?.pass === pass ? user : null;
+  }
+
+  async usersByPasses(passes: string[]): Promise<UserRecord[]> {
+    const users = await Promise.all(passes.map((pass) => this.userByPass(pass)));
+    return users.filter((user) => user !== null);
   }
 
   /**
