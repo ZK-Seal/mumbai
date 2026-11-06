@@ -237,3 +237,39 @@ input[type="text"]:focus-visible {
   outline: 3px solid var(--ink);
   outline-offset: 2px;
 }
+
+.steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+}
+
+.steps li {
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--line);
+  counter-increment: step;
+}
+
+.steps li:last-child {
+  border-bottom: 0;
+}
+
+.step-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.25rem 1rem;
+}
+
+.step-head strong::before {
+  content: counter(step) ". ";
+}
+
+.steps p {
+  margin: 0.25rem 0 0;
+}
+
+.steps button {
+  margin-top: 0.5rem;
+}
