@@ -78,10 +78,11 @@ export type BotWord =
   | "unreachable"
   | "failed";
 
-// One bot, one nonce: its transactions are sent one after another, never side by side.
+// One bot, one nonce: its transactions are sent one after another, never side by side. The tree's
+// writes take their turn in the same queue.
 let queue: Promise<unknown> = Promise.resolve();
 
-function inTurn<T>(work: () => Promise<T>): Promise<T> {
+export function inTurn<T>(work: () => Promise<T>): Promise<T> {
   const next = queue.then(work, work);
   queue = next.catch(() => {});
   return next;
