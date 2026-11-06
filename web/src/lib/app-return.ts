@@ -3,7 +3,7 @@
  * setting (APP_RETURN_URL); it is never taken from a request. Unset means the way back is off.
  */
 
-/** The only states the app is ever told. */
+/** The only states the app is ever told about a seal. */
 export type AppState = "authorised" | "cancelled";
 
 export type AppReturn = Record<AppState, string>;
@@ -40,4 +40,15 @@ export function appReturn(hash: string): AppReturn | null {
     return url.href;
   }
   return { authorised: link("authorised"), cancelled: link("cancelled") };
+}
+
+/**
+ * A link back to the app from the page where a person takes a user name. It carries the state,
+ * `joined` or `cancelled`, and once joined the label the person holds; nothing else.
+ */
+export function joinLink(base: string, state: "joined" | "cancelled", label?: string): string {
+  const url = new URL(base);
+  url.searchParams.set("state", state);
+  if (label) url.searchParams.set("label", label);
+  return url.href;
 }

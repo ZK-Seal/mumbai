@@ -13,7 +13,7 @@ import { OtherSeals } from "./other-seals";
 
 export type Edit = "blank" | "blur";
 
-type Ready = {
+export type Ready = {
   app_id: `app_${string}`;
   action: string;
   environment: "production" | "staging" | "sandbox";
@@ -49,7 +49,7 @@ const EDIT_WORDS: Record<Edit, string> = {
 const ENVIRONMENTS = ["production", "staging", "sandbox"];
 
 /** Takes the server's start answer apart. Null unless it has every piece the World app needs. */
-function readReady(answer: unknown): Ready | null {
+export function readReady(answer: unknown): Ready | null {
   const a = answer as Partial<Record<keyof Ready, unknown>> & { state?: unknown };
   const rp = a?.rp_context as Partial<Record<keyof RpContext, unknown>> | undefined;
   if (a?.state !== "ready") return null;
@@ -108,7 +108,7 @@ function shorten(pass: string): string {
   return pass.length <= 24 ? pass : `${pass.slice(0, 12)}…${pass.slice(-8)}`;
 }
 
-async function post(path: string, body: unknown): Promise<unknown> {
+export async function post(path: string, body: unknown): Promise<unknown> {
   const response = await fetch(path, {
     method: "POST",
     headers: { "content-type": "application/json" },
