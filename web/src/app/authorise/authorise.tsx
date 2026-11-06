@@ -8,6 +8,7 @@ import {
   type IDKitResult,
   type RpContext,
 } from "@worldcoin/idkit";
+import { OtherSeals } from "./other-seals";
 
 export type Edit = "blank" | "blur";
 
@@ -206,12 +207,15 @@ export function Authorise(props: {
       )}
 
       {phase.name === "verified" ? (
-        <p className="state good" role="status">
-          A verified human authorised this seal. Pass:{" "}
-          <span className="mono" title={phase.pass}>
-            {shorten(phase.pass)}
-          </span>
-        </p>
+        <>
+          <p className="state good" role="status">
+            A verified human authorised this seal. Pass:{" "}
+            <span className="mono" title={phase.pass}>
+              {shorten(phase.pass)}
+            </span>
+          </p>
+          <OtherSeals key={phase.pass} pass={phase.pass} hash={hash} />
+        </>
       ) : phase.name === "denied" ? (
         <div role="status">
           <p className="state bad">Human: not verified.</p>

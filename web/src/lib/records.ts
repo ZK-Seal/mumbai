@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { mkdir, readFile, link, unlink, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, link, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { ArkivStore, arkivSettings } from "@/lib/arkiv";
 import type { Credential } from "@/lib/world";
@@ -22,6 +22,25 @@ export interface RecordStore {
   get(hash: string): Promise<SealRecord | null>;
   /** Keeps the record unless the hash already has one. Returns whichever record is kept. */
   put(record: SealRecord): Promise<SealRecord>;
+  /** The newest seals authorised with this pass, at most PASS_LIST_LIMIT of them. */
+  byPass(pass: string): Promise<PassSeal[]>;
+}
+
+/** One seal in the list of seals a pass authorised. The edit is not kept, so it is not here. */
+export type PassSeal = { hash: string; at: string };
+
+export const PASS_LIST_LIMIT = 10;
+
+/** A pass is a number, in decimal or 0x hex, short enough to be kept. */
+export function isPass(value: unknown): value is string {
+  return typeof value === "string" && /^(0x[0-9a-f]{1,124}|[0-9]{1,126})$/i.test(value);
+}
+
+/** Newest first, then by hash so the order never wobbles; at most PASS_LIST_LIMIT. */
+export function newestFirst(seals: PassSeal[]): PassSeal[] {
+  return seals
+    .sort((a, b) => (a.at !== b.at ? (a.at < b.at ? 1 : -1) : a.hash < b.hash ? -1 : 1))
+    .slice(0, PASS_LIST_LIMIT);
 }
 
 /** The store could not be read or written, so nothing can be said about the seal. */
@@ -95,6 +114,24 @@ export class FileStore implements RecordStore {
       await unlink(temp).catch(() => {});
     }
     return { hash, pass, credential, account, at };
+  }
+
+  async byPass(pass: string): Promise<PassSeal[]> {
+    let names: string[];
+    try {
+      names = await readdir(this.dir);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+      throw new StoreError(error);
+    }
+    const found: PassSeal[] = [];
+    for (const name of names) {
+      const hash = name.endsWith(".json") ? name.slice(0, -5) : "";
+      if (!isSealHash(hash)) continue;
+      const record = await this.get(hash);
+      if (record?.pass === pass) found.push({ hash, at: record.at });
+    }
+    return newestFirst(found);
   }
 }
 

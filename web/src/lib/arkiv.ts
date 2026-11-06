@@ -1,10 +1,19 @@
 import { createPublicClient, createWalletClient, ExpirationTime } from "@arkiv-network/sdk";
 import { rabdi } from "@arkiv-network/sdk/chains";
-import { asc, eq } from "@arkiv-network/sdk/query";
+import { asc, desc, eq } from "@arkiv-network/sdk/query";
 import { defineSchema, str, u64 } from "@arkiv-network/sdk/schema";
 import { getAddress, http, isAddress, type Address, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { isAccount, StoreError, type RecordStore, type SealRecord } from "@/lib/records";
+import {
+  isAccount,
+  newestFirst,
+  PASS_LIST_LIMIT,
+  StoreError,
+  type PassSeal,
+  type RecordStore,
+  type SealRecord,
+} from "@/lib/records";
+import { isSealHash } from "@/lib/world";
 
 /**
  * One authorised seal on Arkiv. Every column is indexed, because each one is something a reader
@@ -121,6 +130,32 @@ export class ArkivStore implements RecordStore {
 
   async get(hash: string): Promise<SealRecord | null> {
     return first(await this.rows(hash));
+  }
+
+  async byPass(pass: string): Promise<PassSeal[]> {
+    let rows;
+    try {
+      const page = await this.reader
+        .select({ hash: true, pass: true, at: true })
+        .from(Seals)
+        .where(eq("pass", pass))
+        .ownedBy(this.settings.owner)
+        .orderBy(desc("at"))
+        .limit(PASS_LIST_LIMIT)
+        .fetch();
+      rows = page.entities;
+    } catch (error) {
+      throw new StoreError(error);
+    }
+    const seals: PassSeal[] = [];
+    for (const row of rows) {
+      const ms = Number(row.at.value);
+      if (row.pass.value !== pass || !isSealHash(row.hash.value) || !Number.isSafeInteger(ms)) {
+        continue;
+      }
+      seals.push({ hash: row.hash.value, at: new Date(ms).toISOString() });
+    }
+    return newestFirst(seals);
   }
 
   put(record: SealRecord): Promise<SealRecord> {

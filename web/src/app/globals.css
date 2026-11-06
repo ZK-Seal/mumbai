@@ -176,3 +176,38 @@ a.button:focus-visible {
     width: 100%;
   }
 }
+
+.others {
+  margin: 1.5rem 0 0;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+}
+
+.others h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+  line-height: 1.3;
+}
+
+.others ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.others li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.25rem 1rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.others li:last-child {
+  border-bottom: 0;
+}
+
+.others time {
+  font-size: 0.875rem;
+}
