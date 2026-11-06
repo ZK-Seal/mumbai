@@ -39,22 +39,23 @@
   }
   main, footer {
     width: 100%;
-    max-width: 1072px;
+    max-width: 640px;
     margin: 0 auto;
     padding-left: max(16px, env(safe-area-inset-left));
     padding-right: max(16px, env(safe-area-inset-right));
   }
-  main { flex: 1; padding-top: 32px; padding-bottom: 32px; }
+  main { flex: 1; padding-top: 32px; padding-bottom: 24px; }
   header { margin-bottom: 24px; }
   h1 {
     margin: 0;
-    font-size: 28px;
+    color: var(--accent);
+    font-size: 26px;
     line-height: 1.2;
     font-weight: 600;
     overflow-wrap: anywhere;
   }
-  #count { margin: 8px 0 0; color: var(--accent); font-size: 17px; font-weight: 500; }
-  #count:empty { display: none; }
+  #event { margin: 6px 0 0; color: var(--muted); font-size: 14px; overflow-wrap: anywhere; }
+  #event:empty { display: none; }
   .state {
     margin: 0 0 16px;
     padding: 12px;
@@ -65,7 +66,10 @@
   .state.wait { color: var(--wait); background: var(--wait-bg); }
   .state.bad { color: var(--no); background: var(--no-bg); }
   .state.plain { color: var(--ink); background: var(--surface); border: 1px solid var(--line); }
-  button {
+  button { font: inherit; color: inherit; cursor: pointer; }
+  button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+  [hidden] { display: none !important; }
+  .retry {
     display: block;
     width: 100%;
     max-width: 320px;
@@ -76,34 +80,102 @@
     border-radius: 12px;
     background: var(--accent);
     color: var(--bg);
-    font: 600 16px/1.2 var(--text);
-    cursor: pointer;
+    font-weight: 600;
   }
-  button:disabled { opacity: 0.5; cursor: default; }
-  button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
-  [hidden] { display: none !important; }
-  .person { margin-bottom: 32px; }
-  .person:last-child { margin-bottom: 0; }
-  .person h2 {
-    margin: 0;
+  .retry:disabled { opacity: 0.5; cursor: default; }
+
+  /* The tree: one rail down each branch, and one short tick to each name. */
+  .root {
+    display: inline-block;
+    padding: 8px 14px;
+    border: 1px solid var(--accent);
+    border-radius: 12px;
+    color: var(--accent);
     font-size: 18px;
-    line-height: 1.3;
     font-weight: 600;
     overflow-wrap: anywhere;
   }
-  .address { margin: 4px 0 0; font: 400 13px/1.45 var(--mono); overflow-wrap: anywhere; }
-  .owned { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
-  .photos {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
-    gap: 16px;
-    align-items: start;
-    margin: 12px 0 0;
-    padding: 0;
-    list-style: none;
+  .branch { margin: 0; padding: 0 0 0 12px; list-style: none; }
+  .branch > li { position: relative; padding-left: 16px; }
+  .branch > li::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    border-left: 1px solid var(--line);
   }
-  .card {
+  .branch > li:last-child::before { bottom: auto; height: 22px; }
+  .branch > li::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 22px;
+    width: 12px;
+    border-top: 1px solid var(--line);
+  }
+  .row { display: flex; flex-wrap: wrap; align-items: center; gap: 0 8px; min-height: 44px; }
+  .limb { font-size: 17px; font-weight: 600; }
+  .caption { margin: -8px 0 4px; color: var(--muted); font-size: 12px; }
+  .empty { display: flex; align-items: center; min-height: 44px; color: var(--muted); font-size: 14px; }
+  .name, .to {
     min-width: 0;
+    min-height: 44px;
+    padding: 4px 8px;
+    border: 0;
+    border-radius: 8px;
+    background: none;
+    text-align: left;
+    overflow-wrap: anywhere;
+    transition: opacity 0.15s, background-color 0.15s, color 0.15s;
+  }
+  .name { margin-left: -8px; font-size: 16px; font-weight: 500; }
+  .name[aria-current="true"] { color: var(--accent); }
+  .to { margin-left: auto; color: var(--muted); font: 400 13px/1.3 var(--mono); }
+  .none { color: var(--muted); font-weight: 400; }
+  .tree.lighting .name:not(.lit), .tree.lighting .to:not(.lit) { opacity: 0.4; }
+  .lit { color: var(--accent); background: var(--accent-soft); }
+
+  /* Many names, one address. */
+  #many {
+    position: sticky;
+    bottom: max(12px, env(safe-area-inset-bottom));
+    margin-top: 16px;
+    padding: 12px 40px;
+    border: 1px solid var(--accent);
+    border-radius: 12px;
+    background: var(--surface);
+    text-align: center;
+  }
+  .many-names { margin: 0; font-size: 15px; overflow-wrap: anywhere; }
+  .many-arrow { margin: 2px 0; color: var(--accent); line-height: 1; }
+  .many-one {
+    display: inline-block;
+    max-width: 100%;
+    padding: 4px 14px;
+    border: 1px solid var(--accent);
+    border-radius: 999px;
+    color: var(--accent);
+    font: 400 12px/1.35 var(--mono);
+    overflow-wrap: anywhere;
+  }
+  .many-line { margin: 6px 0 0; font-size: 14px; font-weight: 600; }
+  .many-records { margin: 0; color: var(--muted); font-size: 12px; }
+  .close {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 44px;
+    height: 44px;
+    border: 0;
+    background: none;
+    color: var(--muted);
+    font-size: 18px;
+  }
+
+  /* One image, opened in place. */
+  .panel {
+    margin: 0 0 12px;
     overflow: hidden;
     border: 1px solid var(--line);
     border-radius: 12px;
@@ -120,13 +192,15 @@
   .frame.shown { display: block; min-height: 0; padding: 0; background: none; }
   .frame img { display: block; width: 100%; height: auto; }
   .note { margin: 0; color: var(--muted); font-size: 14px; text-align: center; }
-  .details { padding: 12px; }
-  .details:empty { display: none; }
-  .details p { margin: 0; overflow-wrap: anywhere; }
-  .image-name { font: 400 13px/1.45 var(--mono); }
+  .facts { margin: 0; padding: 12px; }
+  .facts dt { margin-top: 10px; color: var(--muted); font-size: 12px; }
+  .facts dt:first-child { margin-top: 0; }
+  .facts dd { margin: 0; overflow-wrap: anywhere; font-size: 14px; }
+  .facts dd.code { font: 400 12px/1.45 var(--mono); }
+  .facts .name { margin: -4px 0 0 -8px; min-height: 36px; font-size: 14px; }
   .mark {
     display: inline-block;
-    margin-top: 4px;
+    margin: 12px 12px 0;
     padding: 2px 8px;
     border-radius: 8px;
     font-size: 12px;
@@ -135,7 +209,6 @@
     background: var(--wait-bg);
   }
   .mark.differs { color: var(--no); background: var(--no-bg); }
-  .mark:first-child { margin-top: 0; }
   footer {
     padding-top: 16px;
     padding-bottom: max(24px, env(safe-area-inset-bottom));
@@ -148,22 +221,27 @@
 <body>
 <main>
   <header>
-    <h1 id="event"></h1>
-    <p id="count"></p>
+    <h1 id="count"></h1>
+    <p id="event"></p>
   </header>
   <p id="state" class="state" role="status" hidden></p>
-  <button id="retry" type="button" hidden>Try again</button>
+  <button id="retry" class="retry" type="button" hidden>Try again</button>
   <noscript><p class="state bad">This page reads its records with JavaScript.</p></noscript>
-  <div id="people"></div>
+  <div id="tree" class="tree"></div>
+  <div id="many" role="status" hidden></div>
 </main>
 <footer>
-  <p>A proven edit of a signed original (our test key in this demo). Covers are drawn by the app and not proved. Not a privacy guarantee. Records are written by our server. A name is a linkable pseudonym, not a real identity. In this demo our server holds the address keys and acts as the gate.</p>
+  <p>A proven edit of a signed original (our test key in this demo). Covers are drawn by the app and not proved. Not a privacy guarantee. Records are written by our server. The link between a picture and its seal is the uploader's word. A name is a linkable pseudonym, not a real identity. In this demo our server holds the address keys and acts as the gate.</p>
 </footer>
 <script>
 'use strict';
 
-// The event shown when the link names none. A link can name another one with ?event=<slug>.
+// The top of the tree. This page reads records, not the chain.
+const ROOT_NAME = 'armanc.eth';
+// The event counted on top when the link names none. A link can name another one with ?event=<slug>.
 const DEFAULT_EVENT = 'mumbai-march';
+// Trial rows use event names that start like this. They stay out of the tree unless a link names one.
+const TRIAL_EVENT = 'test-';
 
 const RPC_URL = 'https://rpc.rabdi.db-chain.testnet.arkiv.network';
 // Anyone can write a row that looks like ours, so only rows this wallet created are believed.
@@ -178,20 +256,21 @@ const PAGE_SIZE = 100;
 const MAX_PAGES = 20;
 const RPC_TIMEOUT_MS = 20000;
 const PICTURE_TIMEOUT_MS = 30000;
-const PICTURES_AT_ONCE = 3;
 
 const EVENT_SLUG = /^[a-z0-9][a-z0-9-]{2,39}$/;
 const HEX_64 = /^[0-9a-fA-F]{64}$/;
 const ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 const NAME = /^[\p{L}\p{N}-]+(\.[\p{L}\p{N}-]+)+$/u;
 const NAME_MAX = 128;
+const LABEL = /^[a-z0-9][a-z0-9-]{2,19}$/;
 
 const ui = {
-  event: document.getElementById('event'),
   count: document.getElementById('count'),
+  event: document.getElementById('event'),
   state: document.getElementById('state'),
   retry: document.getElementById('retry'),
-  people: document.getElementById('people'),
+  tree: document.getElementById('tree'),
+  many: document.getElementById('many'),
 };
 
 // All row text is untrusted. It reaches the page only through textContent, alt and validated hex.
@@ -236,13 +315,9 @@ function secondsToWait(response) {
   return Number.isNaN(asked) ? 5 : Math.min(Math.max(asked, 1), 60);
 }
 
-// The slug has passed EVENT_SLUG, so it cannot close the quoted string.
-function eventQuery(slug) {
-  return "event = str('" + slug + "') AND $creator = addr(" + CREATOR + ') ORDER BY at:u64 ASC';
-}
-
-function usersQuery() {
-  return "arkiv.schema = str('" + USER_KIND + "') AND $creator = addr(" + CREATOR + ') ORDER BY at:u64 ASC';
+// Only rows our wallet created. The kind is a fixed word, so it cannot close the quoted string.
+function kindQuery(kind) {
+  return "arkiv.schema = str('" + kind + "') AND $creator = addr(" + CREATOR + ') ORDER BY at:u64 ASC';
 }
 
 async function readPage(query, offset) {
@@ -342,39 +417,60 @@ function placeOf(row, fields) {
   };
 }
 
-// One event row as a record, a pointer or an image name, or null if it should not be believed.
-function readEventRow(row, slug) {
-  if (!believable(row)) return null;
-  const fields = fieldsOf(row);
-  if (textField(fields, 'event') !== slug) return null;
-  const hash = hexField(fields, 'hash');
-  if (!hash) return null;
-  const place = { ...placeOf(row, fields), hash };
-  if (place.kind === RECORD_KIND) {
-    const pass = textField(fields, 'pass');
-    if (!pass) return null;
-    return { ...place, pass, userName: nameField(fields, 'name') };
-  }
-  if (place.kind === POINTER_KIND) {
-    const ref = hexField(fields, 'ref');
-    const sha256 = hexField(fields, 'sha256');
-    if (!ref || !sha256) return null;
-    return { ...place, ref, sha256 };
-  }
-  if (place.kind === IMAGE_NAME_KIND) {
-    const imageName = nameField(fields, 'name');
-    return imageName ? { ...place, imageName } : null;
-  }
-  return null;
+// An event name of the right form, or null.
+function eventField(fields) {
+  const value = textField(fields, 'event');
+  return value !== null && EVENT_SLUG.test(value) ? value : null;
 }
 
-function readUserRow(row) {
+// One row of a kind, or null if it should not be believed.
+function readRecord(row) {
+  if (!believable(row)) return null;
+  const fields = fieldsOf(row);
+  const place = placeOf(row, fields);
+  const hash = hexField(fields, 'hash');
+  const pass = textField(fields, 'pass');
+  const event = eventField(fields);
+  if (place.kind !== RECORD_KIND || !hash || !pass || !event) return null;
+  return { ...place, hash, pass, event, userName: nameField(fields, 'name') };
+}
+
+function readPointer(row) {
+  if (!believable(row)) return null;
+  const fields = fieldsOf(row);
+  const place = placeOf(row, fields);
+  const hash = hexField(fields, 'hash');
+  const ref = hexField(fields, 'ref');
+  const sha256 = hexField(fields, 'sha256');
+  if (place.kind !== POINTER_KIND || !hash || !ref || !sha256) return null;
+  return { ...place, hash, event: eventField(fields), ref, sha256 };
+}
+
+function readImageName(row) {
+  if (!believable(row)) return null;
+  const fields = fieldsOf(row);
+  const place = placeOf(row, fields);
+  const hash = hexField(fields, 'hash');
+  const imageName = nameField(fields, 'name');
+  if (place.kind !== IMAGE_NAME_KIND || !hash || !imageName) return null;
+  return { ...place, hash, event: eventField(fields), imageName };
+}
+
+function readUser(row) {
   if (!believable(row)) return null;
   const fields = fieldsOf(row);
   const place = placeOf(row, fields);
   const pass = textField(fields, 'pass');
   if (place.kind !== USER_KIND || !pass) return null;
-  return { ...place, pass, name: nameField(fields, 'name'), address: addressField(fields, 'address') };
+  const name = nameField(fields, 'name');
+  const label = textField(fields, 'label');
+  return {
+    ...place,
+    pass,
+    name,
+    label: label !== null && LABEL.test(label) ? label : (name ? name.split('.')[0] : null),
+    address: addressField(fields, 'address'),
+  };
 }
 
 function byCreation(a, b) {
@@ -392,42 +488,57 @@ function firstOfEach(rows, keyOf) {
   return kept;
 }
 
-// One photo per record, oldest first.
-// A pointer with no record behind it has no person behind it, so it is not shown.
-function toPhotos(rows, slug) {
-  const believed = rows.map((row) => readEventRow(row, slug)).filter(Boolean);
-  const ofKind = (kind) => firstOfEach(believed.filter((row) => row.kind === kind), (row) => row.hash);
-  const pointers = ofKind(POINTER_KIND);
-  const imageNames = ofKind(IMAGE_NAME_KIND);
-  return Array.from(ofKind(RECORD_KIND).values(), (record) => ({
-    record,
-    pointer: pointers.get(record.hash) || null,
-    imageName: imageNames.has(record.hash) ? imageNames.get(record.hash).imageName : null,
-  }));
+// A pointer or an image name counts only for the event of its record, when it names one.
+function ofRecord(rows, record) {
+  return rows.get(record.event + '/' + record.hash) || rows.get('/' + record.hash) || null;
 }
 
-// One group per person, in the order each was first seen. The address may not exist yet.
-function toGroups(photos, users) {
-  const groups = new Map();
-  for (const photo of photos) {
-    const { pass, userName } = photo.record;
-    if (!groups.has(pass)) {
-      const user = users.get(pass);
-      groups.set(pass, {
-        name: user ? user.name : null,
-        address: user ? user.address : null,
-        photos: [],
+// The whole tree's data. One photo per seal, oldest first. A pointer with no record has no person behind it, so it is not shown.
+function toModel(records, pointers, imageNames, users) {
+  const placeKey = (row) => (row.event || '') + '/' + row.hash;
+  const pointerOf = firstOfEach(pointers, placeKey);
+  const imageNameOf = firstOfEach(imageNames, placeKey);
+  const people = new Map();
+  const named = [];
+  let unnamed = 0;
+  for (const user of firstOfEach(users, (row) => row.pass).values()) {
+    const person = {
+      pass: user.pass,
+      label: user.label || 'Person ' + (unnamed += 1),
+      name: user.name,
+      address: user.address,
+      owner: user.address ? user.address.toLowerCase() : 'pass:' + user.pass,
+    };
+    people.set(user.pass, person);
+    if (user.label) named.push(person);
+  }
+  const events = new Map();
+  for (const record of firstOfEach(records, (row) => row.hash).values()) {
+    if (!people.has(record.pass)) {
+      unnamed += 1;
+      people.set(record.pass, {
+        pass: record.pass,
+        label: record.userName ? record.userName.split('.')[0] : 'Person ' + unnamed,
+        name: record.userName,
+        address: null,
+        owner: 'pass:' + record.pass,
       });
     }
-    const group = groups.get(pass);
-    group.photos.push(photo);
-    if (!group.name) group.name = userName;
+    const imageName = ofRecord(imageNameOf, record);
+    const photo = {
+      record,
+      person: people.get(record.pass),
+      pointer: ofRecord(pointerOf, record),
+      imageName: imageName ? imageName.imageName : null,
+    };
+    if (!events.has(record.event)) events.set(record.event, []);
+    events.get(record.event).push(photo);
   }
-  return Array.from(groups.values());
+  return { named, events };
 }
 
 function countLine(photos, complete) {
-  const people = new Set(photos.map((photo) => photo.record.pass)).size;
+  const people = new Set(photos.map((photo) => photo.person.pass)).size;
   const line = photos.length + (photos.length === 1 ? ' photo' : ' photos')
     + ' from ' + people + (people === 1 ? ' person' : ' people');
   return complete ? line : 'At least ' + line;
@@ -478,13 +589,77 @@ async function loadPicture(pointer) {
   return differing || { state: 'unreachable' };
 }
 
-function addMark(details, text, title, className) {
-  const mark = make('span', 'mark ' + className, text);
-  mark.title = title;
-  details.append(mark);
+// image1.mumbai-march.events.armanc.eth shows as i1.
+function shortImage(name) {
+  if (!name) return null;
+  const first = name.split('.')[0];
+  const number = /^image(\d+)$/.exec(first);
+  return number ? 'i' + number[1] : first;
 }
 
-async function fillCard(photo, frame, note, details, label) {
+function shortAddress(address) {
+  return address.slice(0, 6) + '…' + address.slice(-4);
+}
+
+function button(className, text, onClick) {
+  const node = make('button', className, text);
+  node.type = 'button';
+  node.addEventListener('click', onClick);
+  return node;
+}
+
+// Everything that lights up together, and the names to list, for each owner.
+let lightable = [];
+let namesOf = new Map();
+let litOwner = null;
+
+function addName(owner, text) {
+  if (!namesOf.has(owner)) namesOf.set(owner, []);
+  if (!namesOf.get(owner).includes(text)) namesOf.get(owner).push(text);
+}
+
+function lightsWith(node, person) {
+  lightable.push({ node, owner: person.owner });
+  return node;
+}
+
+// Tapping a person or an address shows every name of theirs, and tapping again clears it.
+function light(person) {
+  const clearing = person === null || litOwner === person.owner;
+  litOwner = clearing ? null : person.owner;
+  ui.tree.classList.toggle('lighting', !clearing);
+  for (const { node, owner } of lightable) node.classList.toggle('lit', owner === litOwner);
+  ui.many.replaceChildren();
+  ui.many.hidden = clearing;
+  if (clearing) return;
+  const names = namesOf.get(person.owner) || [];
+  const one = person.address ? 'address' : 'person';
+  ui.many.append(
+    button('close', '×', () => light(null)),
+    make('p', 'many-names', names.length ? names.join(', ') : person.label),
+    make('p', 'many-arrow', '↓'),
+    make('span', 'many-one', person.address || person.label),
+    make('p', 'many-line', (names.length > 1 ? 'Many names, one ' : 'One name, one ') + one),
+    make('p', 'many-records', 'By our records'),
+  );
+  ui.many.querySelector('.close').setAttribute('aria-label', 'Close');
+}
+
+// The arrow from a name to its address. A person with no address yet points to their own label.
+function toOwner(person) {
+  const node = button('to', '→ ' + (person.address ? shortAddress(person.address) : person.label), () => light(person));
+  node.setAttribute('aria-label', person.address ? 'Address ' + person.address + ', by our records' : 'Person ' + person.label);
+  return lightsWith(node, person);
+}
+
+function fact(list, title, value, className) {
+  const dd = make('dd', className || '');
+  if (typeof value === 'string') dd.textContent = value;
+  else dd.append(value);
+  list.append(make('dt', '', title), dd);
+}
+
+async function fillFrame(photo, frame, note, label) {
   if (!photo.pointer) {
     note.textContent = 'No picture on record.';
     return;
@@ -494,12 +669,13 @@ async function fillCard(photo, frame, note, details, label) {
     note.textContent = 'This picture cannot be reached just now.';
     return;
   }
-  if (picture.state === 'differs') {
-    addMark(details, 'Differs from its record', "This picture's hash is not the one in its record.", 'differs');
-  }
-  if (picture.state === 'unchecked') {
-    addMark(details, 'Not checked', "This browser could not check the picture's hash.", 'unchecked');
-  }
+  const markIt = (text, title, className) => {
+    const mark = make('span', 'mark ' + className, text);
+    mark.title = title;
+    frame.after(mark);
+  };
+  if (picture.state === 'differs') markIt('Differs from its record', "This picture's hash is not the one in its record.", 'differs');
+  if (picture.state === 'unchecked') markIt('Not checked', "This browser could not check the picture's hash.", 'unchecked');
   const cannotShow = 'This file cannot be shown as a picture.';
   if (!picture.type) {
     note.textContent = cannotShow;
@@ -518,43 +694,109 @@ async function fillCard(photo, frame, note, details, label) {
   image.src = URL.createObjectURL(new Blob([picture.bytes], { type: picture.type }));
 }
 
-function addCard(photo, list, label) {
+// The picture from Swarm, its seal hash and its person. It loads only when first opened.
+function openPanel(photo, label) {
+  const panel = make('div', 'panel');
   const note = make('p', 'note', 'Loading picture…');
   const frame = make('div', 'frame');
   frame.append(note);
-  const details = make('div', 'details');
-  if (photo.imageName) details.append(make('p', 'image-name', photo.imageName));
-  const card = make('li', 'card');
-  card.append(frame, details);
-  list.append(card);
-  return () => fillCard(photo, frame, note, details, photo.imageName || label).catch(() => {
+  const facts = make('dl', 'facts');
+  if (photo.imageName) fact(facts, 'Name', photo.imageName, 'code');
+  fact(facts, 'Seal hash', photo.record.hash, 'code');
+  fact(facts, 'Person', lightsWith(button('name', photo.person.label, () => light(photo.person)), photo.person));
+  if (photo.person.address) fact(facts, 'Address, by our records', photo.person.address, 'code');
+  panel.append(frame, facts);
+  fillFrame(photo, frame, note, label).catch(() => {
     note.textContent = 'This picture cannot be reached just now.';
   });
+  return panel;
 }
 
-// Adds one person and their cards. Returns the jobs that load the pictures.
-function addGroup(group, index, photoNumber) {
-  const section = make('section', 'person');
-  section.append(make('h2', 'person-name', group.name || 'Person ' + (index + 1)));
-  if (group.address) {
-    section.append(make('p', 'address', group.address), make('p', 'owned', 'Names owned by this address, by our records'));
-  }
-  const list = make('ul', 'photos');
-  section.append(list);
-  ui.people.append(section);
-  return group.photos.map((photo, i) => addCard(photo, list, 'Photo ' + (photoNumber + i + 1)));
-}
-
-async function runAll(tasks) {
-  let next = 0;
-  const worker = async () => {
-    while (next < tasks.length) {
-      const task = tasks[next];
-      next += 1;
-      await task();
+function imageRow(photo, position) {
+  const short = shortImage(photo.imageName);
+  const label = photo.imageName || 'Photo ' + position;
+  addName(photo.person.owner, short || label);
+  const item = make('li', '');
+  const row = make('div', 'row');
+  const open = button('name' + (short ? '' : ' none'), short || 'No name yet', () => {
+    let panel = item.querySelector('.panel');
+    if (!panel) {
+      panel = openPanel(photo, label);
+      item.append(panel);
+      if (litOwner === photo.person.owner) panel.querySelector('.facts .name').classList.add('lit');
+      open.setAttribute('aria-expanded', 'true');
+      return;
     }
-  };
-  await Promise.all(Array.from({ length: Math.min(PICTURES_AT_ONCE, tasks.length) }, worker));
+    panel.hidden = !panel.hidden;
+    open.setAttribute('aria-expanded', String(!panel.hidden));
+  });
+  open.setAttribute('aria-expanded', 'false');
+  row.append(lightsWith(open, photo.person), toOwner(photo.person));
+  item.append(row);
+  return item;
+}
+
+function emptyItem(text) {
+  const item = make('li', 'empty', text);
+  return item;
+}
+
+function usersBranch(named) {
+  const item = make('li', '');
+  const row = make('div', 'row');
+  row.append(make('span', 'limb', 'users'));
+  const list = make('ul', 'branch');
+  if (named.length === 0) list.append(emptyItem('No names yet.'));
+  for (const person of named) {
+    addName(person.owner, person.label);
+    const personItem = make('li', '');
+    const personRow = make('div', 'row');
+    personRow.append(lightsWith(button('name', person.label, () => light(person)), person), toOwner(person));
+    personItem.append(personRow);
+    list.append(personItem);
+  }
+  item.append(row);
+  if (named.some((person) => person.address)) item.append(make('p', 'caption', 'Addresses by our records'));
+  item.append(list);
+  return item;
+}
+
+function eventsBranch(events, current, complete) {
+  const item = make('li', '');
+  const row = make('div', 'row');
+  row.append(make('span', 'limb', 'events'));
+  const list = make('ul', 'branch');
+  if (events.size === 0) list.append(emptyItem('No events yet.'));
+  const eventButtons = [];
+  for (const [slug, photos] of events) {
+    const eventItem = make('li', '');
+    const eventRow = make('div', 'row');
+    const pick = button('name', slug, () => {
+      for (const other of eventButtons) other.setAttribute('aria-current', String(other === pick));
+      showCount(slug, photos, complete);
+    });
+    pick.setAttribute('aria-current', String(slug === current));
+    eventButtons.push(pick);
+    eventRow.append(pick);
+    const images = make('ul', 'branch');
+    if (photos.length === 0) images.append(emptyItem('No photos for this event yet.'));
+    photos.forEach((photo, index) => images.append(imageRow(photo, index + 1)));
+    eventItem.append(eventRow, images);
+    list.append(eventItem);
+  }
+  item.append(row, list);
+  return item;
+}
+
+function showCount(slug, photos, complete) {
+  if (photos.length === 0) {
+    ui.count.textContent = slug;
+    ui.event.textContent = 'No photos for this event yet.';
+    return;
+  }
+  ui.count.textContent = countLine(photos, complete);
+  ui.event.textContent = slug;
+  document.title = slug;
 }
 
 function showFailure(failure) {
@@ -574,53 +816,57 @@ function showFailure(failure) {
   }
 }
 
-async function show(slug) {
+async function show(linked) {
   ui.retry.hidden = true;
   ui.count.textContent = '';
-  ui.people.replaceChildren();
+  ui.event.textContent = '';
+  ui.tree.replaceChildren();
+  light(null);
+  lightable = [];
+  namesOf = new Map();
   setState('Reading the records…', 'wait');
-  // The photos need the event's rows. Without the user rows they still show, with fewer words.
-  const usersRead = readRows(usersQuery()).catch(() => null);
-  let read;
+  // Only the seals are a must. Without the others the tree still shows, with fewer words.
+  const later = (kind) => readRows(kindQuery(kind)).catch(() => null);
+  const usersRead = later(USER_KIND);
+  const pointersRead = later(POINTER_KIND);
+  const namesRead = later(IMAGE_NAME_KIND);
+  let records;
   try {
-    read = await readRows(eventQuery(slug));
+    records = await readRows(kindQuery(RECORD_KIND));
   } catch (failure) {
     showFailure(failure);
     return;
   }
-  const photos = toPhotos(read.rows, slug);
-  if (photos.length === 0) {
-    setState('No photos for this event yet.', 'plain');
-    return;
-  }
-  const userRows = await usersRead;
-  if (userRows) {
-    clearState();
-  } else {
-    setState("People's names and addresses could not all be read just now.", 'plain');
-  }
-  const believedUsers = userRows ? userRows.rows.map(readUserRow).filter(Boolean) : [];
-  const users = firstOfEach(believedUsers, (row) => row.pass);
-  ui.count.textContent = countLine(photos, read.complete);
-  const jobs = [];
-  toGroups(photos, users).forEach((group, index) => {
-    jobs.push(...addGroup(group, index, jobs.length));
-  });
-  await runAll(jobs);
+  const [users, pointers, names] = await Promise.all([usersRead, pointersRead, namesRead]);
+  const rowsOf = (read, reader) => (read ? read.rows.map(reader).filter(Boolean) : []);
+  const model = toModel(
+    rowsOf(records, readRecord),
+    rowsOf(pointers, readPointer),
+    rowsOf(names, readImageName),
+    rowsOf(users, readUser),
+  );
+  // Trial events stay out, unless the link names one.
+  const events = new Map([...model.events].filter(([slug]) => !slug.startsWith(TRIAL_EVENT) || slug === linked));
+  const current = linked || (events.has(DEFAULT_EVENT) ? DEFAULT_EVENT : events.keys().next().value || DEFAULT_EVENT);
+  if (!events.has(current)) events.set(current, []);
+  if (users && pointers && names) clearState();
+  else setState('Some names or pictures could not be read just now.', 'plain');
+  showCount(current, events.get(current), records.complete);
+  const root = make('div', 'root', ROOT_NAME);
+  const branches = make('ul', 'branch');
+  branches.append(usersBranch(model.named), eventsBranch(events, current, records.complete));
+  ui.tree.append(root, branches);
 }
 
 function start() {
   const link = new URLSearchParams(window.location.search);
-  const slug = link.has('event') ? link.get('event') : DEFAULT_EVENT;
-  if (!EVENT_SLUG.test(slug)) {
-    ui.event.hidden = true;
+  const linked = link.has('event') ? link.get('event') : null;
+  if (linked !== null && !EVENT_SLUG.test(linked)) {
     setState('This link does not name an event.', 'bad');
     return;
   }
-  ui.event.textContent = slug;
-  document.title = slug;
-  ui.retry.addEventListener('click', () => show(slug));
-  show(slug);
+  ui.retry.addEventListener('click', () => show(linked));
+  show(linked);
 }
 
 start();
