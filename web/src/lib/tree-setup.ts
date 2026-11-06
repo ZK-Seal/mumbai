@@ -66,9 +66,9 @@ const STEP_GAS: Record<TreeStepId, bigint> = {
 
 /** What one later write costs in gas, from the same fork runs. */
 export const WRITE_GAS = {
-  user: BigInt(320000),
-  firstImage: BigInt(950000),
-  image: BigInt(420000),
+  user: BigInt(420000),
+  firstImage: BigInt(980000),
+  image: BigInt(460000),
   eventPage: BigInt(250000),
 };
 

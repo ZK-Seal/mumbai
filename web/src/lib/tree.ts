@@ -1,9 +1,11 @@
+import { createHmac } from "node:crypto";
 import {
   BaseError,
   createWalletClient,
   decodeAbiParameters,
   decodeFunctionResult,
   encodeAbiParameters,
+  encodePacked,
   encodeFunctionData,
   getAddress,
   http,
@@ -13,6 +15,7 @@ import {
   namehash,
   parseAbi,
   stringToHex,
+  toFunctionSelector,
   toHex,
   zeroAddress,
   type Address,
@@ -96,6 +99,7 @@ const BRANCH_ROLES = [ROLE_RENEW, ROLE_SET_SUBREGISTRY, ROLE_SET_RESOLVER].reduc
 export const treeResolverAbi = parseAbi([
   "function setText(bytes name, string key, string value)",
   "function setContenthash(bytes name, bytes hash)",
+  "function setAddress(bytes name, uint256 coinType, bytes addressBytes)",
   "function multicall(bytes[] data) returns (bytes[])",
   "function resolve(bytes name, bytes data) view returns (bytes)",
   "function hasRootRoles(uint256 roleBitmap, address account) view returns (bool)",
@@ -104,11 +108,29 @@ export const treeResolverAbi = parseAbi([
 const profileAbi = parseAbi([
   "function text(bytes32 node, string key) view returns (string)",
   "function contenthash(bytes32 node) view returns (bytes)",
+  "function addr(bytes32 node, uint256 coinType) view returns (bytes)",
 ]);
+
+/** The coin type of an Ethereum address record (ENSIP-9, SLIP-44). */
+const ETH_COIN = BigInt(60);
 
 const universalAbi = parseAbi([
   "function resolve(bytes name, bytes data) view returns (bytes, address)",
   "function findResolver(bytes name) view returns (address, bytes32, uint256)",
+  "function reverse(bytes lookupAddress, uint256 coinType) view returns (string, address, address)",
+]);
+
+/**
+ * The default reverse registrar (ENSIP-19, default.reverse) on mainnet. It takes a primary name
+ * for an address from anyone who brings that address's signature, so the bot can relay it and
+ * the address never needs ETH. The Universal Resolver falls back to it when the address has no
+ * addr.reverse record.
+ */
+export const DEFAULT_REVERSE: Address = "0x283F227c4Bd38ecE252C4Ae7ECE650B0e913f1f9";
+
+const defaultReverseAbi = parseAbi([
+  "function setNameForAddrWithSignature(address addr, uint256 signatureExpiry, string name, bytes signature)",
+  "function nameForAddr(address addr) view returns (string)",
 ]);
 
 export const UNIVERSAL_RESOLVER: Address = "0xeeeeeeee14d718c2b47d9923deab1335e144eeee";
@@ -332,6 +354,75 @@ export async function sendWave(
 }
 
 // ---------------------------------------------------------------------------------------------
+// The people's own addresses
+
+const CURVE_ORDER = BigInt("0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141");
+
+/**
+ * The key of a person's own Ethereum address, derived on this server from their pass and the
+ * bot's key: HMAC-SHA256 under a key made from DESK_BOT_KEY with a fixed label, over
+ * "user-key:" + pass, brought into the range of secp256k1 keys. The same pass always gives the
+ * same address. Never logged, never returned.
+ *
+ * This is custodial, for the demo only: the server can sign for every person. The intended design
+ * keeps this key on the person's phone, and the server never sees it.
+ */
+function userKey(pass: string): Hex {
+  const secret = botKey();
+  if (!secret) throw new TreeError("not-set-up", "no bot key");
+  const base = createHmac("sha256", Buffer.from(secret.slice(2), "hex"))
+    .update("tree user keys")
+    .digest();
+  const raw = createHmac("sha256", base).update(`user-key:${pass}`).digest("hex");
+  const key = (BigInt(`0x${raw}`) % (CURVE_ORDER - BigInt(1))) + BigInt(1);
+  return `0x${key.toString(16).padStart(64, "0")}`;
+}
+
+/** The person's own address: every name of theirs is held by it and points to it. */
+export function userAddress(pass: string): string {
+  return privateKeyToAccount(userKey(pass)).address;
+}
+
+/**
+ * The bot's transaction that makes `name` the primary name of the person's address: the address
+ * signs (with its derived key), the bot sends it to the default reverse registrar and pays. The
+ * signature is good for 30 minutes.
+ */
+async function primaryNameStep(client: PublicClient, pass: string, name: string): Promise<Step> {
+  const account = privateKeyToAccount(userKey(pass));
+  const block = await client.getBlock();
+  const expiry = block.timestamp + BigInt(1800);
+  const selector = toFunctionSelector(
+    "setNameForAddrWithSignature(address,uint256,string,bytes)",
+  );
+  const message = keccak256(
+    encodePacked(
+      ["address", "bytes4", "address", "uint256", "string"],
+      [DEFAULT_REVERSE, selector, account.address, expiry, name],
+    ),
+  );
+  const signature = await account.signMessage({ message: { raw: message } });
+  return {
+    what: `primary name of ${account.address}`,
+    to: DEFAULT_REVERSE,
+    data: encodeFunctionData({
+      abi: defaultReverseAbi,
+      functionName: "setNameForAddrWithSignature",
+      args: [account.address, expiry, name, signature],
+    }),
+  };
+}
+
+async function defaultName(client: PublicClient, address: Address): Promise<string> {
+  return client.readContract({
+    address: DEFAULT_REVERSE,
+    abi: defaultReverseAbi,
+    functionName: "nameForAddr",
+    args: [address],
+  });
+}
+
+// ---------------------------------------------------------------------------------------------
 // Where everything is
 
 function salt(kind: string, name: string): bigint {
@@ -432,12 +523,16 @@ export function register(
   };
 }
 
-/** One multicall on the tree's resolver: the given text records, and the contenthash if any. */
+/**
+ * One multicall on the tree's resolver: the given text records, the contenthash if any, and the
+ * Ethereum address record if any.
+ */
 export function records(
   resolver: Address,
   name: string,
   texts: Record<string, string>,
   contenthash: Hex | null,
+  address: Address | null = null,
 ): Step {
   const node = dns(name);
   const calls: Hex[] = Object.entries(texts).map(([key, value]) =>
@@ -449,6 +544,15 @@ export function records(
         abi: treeResolverAbi,
         functionName: "setContenthash",
         args: [node, contenthash],
+      }),
+    );
+  }
+  if (address) {
+    calls.push(
+      encodeFunctionData({
+        abi: treeResolverAbi,
+        functionName: "setAddress",
+        args: [node, ETH_COIN, address],
       }),
     );
   }
@@ -644,26 +748,46 @@ async function ownContenthash(client: PublicClient, resolver: Address, name: str
   return decodeFunctionResult({ abi: profileAbi, functionName: "contenthash", data: out });
 }
 
-/** The texts and contenthash a name is missing or has wrong; null when all are already so. */
+/** The Ethereum address record straight from the tree's resolver; null when unset. */
+async function ownAddress(client: PublicClient, resolver: Address, name: string) {
+  const data = encodeFunctionData({
+    abi: profileAbi,
+    functionName: "addr",
+    args: [namehash(name), ETH_COIN],
+  });
+  const out = await client.readContract({
+    address: resolver,
+    abi: treeResolverAbi,
+    functionName: "resolve",
+    args: [dns(name), data],
+  });
+  const bytes = decodeFunctionResult({ abi: profileAbi, functionName: "addr", data: out });
+  return bytes.length === 42 ? getAddress(bytes) : null;
+}
+
+/** The records a name is missing or has wrong, as one multicall; null when all are already so. */
 async function missing(
   client: PublicClient,
   resolver: Address,
   name: string,
   texts: Record<string, string>,
   contenthash: Hex | null,
+  address: Address | null = null,
 ): Promise<Step | null> {
   const keys = Object.keys(texts);
-  const [now, hash] = await Promise.all([
+  const [now, hash, addressNow] = await Promise.all([
     Promise.all(keys.map((key) => ownText(client, resolver, name, key))),
     contenthash ? ownContenthash(client, resolver, name) : null,
+    address ? ownAddress(client, resolver, name) : null,
   ]);
   const wrong: Record<string, string> = {};
   keys.forEach((key, i) => {
     if (now[i] !== texts[key]) wrong[key] = texts[key];
   });
   const hashWrong = contenthash !== null && (hash ?? "0x").toLowerCase() !== contenthash.toLowerCase();
-  if (Object.keys(wrong).length === 0 && !hashWrong) return null;
-  return records(resolver, name, wrong, hashWrong ? contenthash : null);
+  const addressWrong = address !== null && (!addressNow || !isAddressEqual(addressNow, address));
+  if (Object.keys(wrong).length === 0 && !hashWrong && !addressWrong) return null;
+  return records(resolver, name, wrong, hashWrong ? contenthash : null, addressWrong ? address : null);
 }
 
 function chainError(error: unknown): never {
@@ -700,6 +824,10 @@ export type TreeReading = {
   name: string;
   /** The resolver the Universal Resolver finds for the name; null when none. */
   resolver: Address | null;
+  /** The Ethereum address record (coin type 60); null when unset. */
+  address: Address | null;
+  /** Who holds the name in its registry; null when it is not registered. */
+  owner: Address | null;
   texts: Record<string, string | null>;
   contenthash: Hex | null;
   /** The Swarm reference in the contenthash, when it is one. */
@@ -730,7 +858,13 @@ export async function readTreeName(
   client: PublicClient = ethClient(),
 ): Promise<TreeReading> {
   const node = namehash(name);
-  const [hash, ...texts] = await Promise.all([
+  const [owner, addr, hash, ...texts] = await Promise.all([
+    tokenOwner(client, name),
+    universal(
+      client,
+      name,
+      encodeFunctionData({ abi: profileAbi, functionName: "addr", args: [node, ETH_COIN] }),
+    ),
     universal(
       client,
       name,
@@ -766,16 +900,76 @@ export async function readTreeName(
     }
   }
   const ch = contenthash && contenthash !== "0x" ? contenthash : null;
-  return { name, resolver, texts: read, contenthash: ch, swarm: swarmRef(ch) };
+  const bytes = addr ? (decodeAbiParameters([{ type: "bytes" }], addr.out)[0] as Hex) : "0x";
+  const address = bytes.length === 42 ? getAddress(bytes) : null;
+  return { name, resolver, address, owner, texts: read, contenthash: ch, swarm: swarmRef(ch) };
+}
+
+/** Who holds a name: the latest owner in the registry that holds its first label. */
+async function tokenOwner(client: PublicClient, name: string): Promise<Address | null> {
+  try {
+    const dot = name.indexOf(".");
+    const place = await deskPlace(client, name.slice(dot + 1));
+    if (!place?.registry) return null;
+    const state = await client.readContract({
+      address: place.registry,
+      abi: registryAbi,
+      functionName: "getState",
+      args: [labelHash(name.slice(0, dot))],
+    });
+    return state.status === REGISTERED && state.latestOwner !== zeroAddress
+      ? getAddress(state.latestOwner)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The primary name of an address, the way any wallet or site reads it: reverse resolution
+ * through the Universal Resolver (addr.reverse first, then default.reverse), which checks that
+ * the name points back to the address. Checked forward once more here. Null when there is none.
+ */
+export async function primaryName(
+  address: string,
+  client: PublicClient = ethClient(),
+): Promise<string | null> {
+  let name: string;
+  try {
+    [name] = await client.readContract({
+      address: UNIVERSAL_RESOLVER,
+      abi: universalAbi,
+      functionName: "reverse",
+      args: [getAddress(address), ETH_COIN],
+    });
+  } catch {
+    return null;
+  }
+  if (!name) return null;
+  const forward = await universal(
+    client,
+    name,
+    encodeFunctionData({ abi: profileAbi, functionName: "addr", args: [namehash(name), ETH_COIN] }),
+  );
+  if (!forward) return null;
+  const bytes = decodeAbiParameters([{ type: "bytes" }], forward.out)[0] as Hex;
+  return bytes.length === 42 && isAddressEqual(getAddress(bytes), getAddress(address))
+    ? name
+    : null;
 }
 
 // ---------------------------------------------------------------------------------------------
 // Writes
 
 /**
- * Registers a person: <label>.users.<root>, held by the bot, with their pass as a text record.
- * The record and the name go out together in one wave (record first), so about one block, ~12 s.
- * The same label with the same pass again sends nothing; with another pass it is "taken".
+ * Registers a person: <label>.users.<root>, held by the person's own address (userAddress), with
+ * their pass as a text record and that address as its address record. The address gets the name
+ * as its primary name, signed by the address and sent by the bot through the default reverse
+ * registrar. Records, name and primary name go out together in one wave, about one block, ~12 s.
+ *
+ * The same label with the same pass again sends only what is missing, nothing when all is there.
+ * "taken": the label holds another pass, or the pass's address already has another user's name
+ * as its primary name (one address, one person's name).
  */
 export function registerUser(label: string, pass: string): Promise<TreeName> {
   return inTurn(async () => {
@@ -789,17 +983,23 @@ export function registerUser(label: string, pass: string): Promise<TreeName> {
     const name = userName(clean);
     const keys = treeKeys(tree.root);
     try {
-      const at = await entry(client, tree.users.registry, clean);
-      const now = await ownText(client, tree.resolver, name, keys.pass);
-      if (at.status !== 0) {
-        if (at.registered && now === pass) return { name, tx: "" };
-        throw new TreeError("taken");
-      }
+      const address = getAddress(userAddress(pass));
+      const [at, now, primary] = await Promise.all([
+        entry(client, tree.users.registry, clean),
+        ownText(client, tree.resolver, name, keys.pass),
+        defaultName(client, address),
+      ]);
+      if (at.status !== 0 && !(at.registered && now === pass)) throw new TreeError("taken");
+      if (primary !== "" && primary !== name) throw new TreeError("taken", "address has a name");
       const steps: Step[] = [];
-      if (now !== pass) steps.push(records(tree.resolver, name, { [keys.pass]: pass }, null));
-      steps.push(
-        register(tree.users.registry, clean, tree.bot, zeroAddress, tree.resolver, BigInt(0), name),
-      );
+      const fix = await missing(client, tree.resolver, name, { [keys.pass]: pass }, null, address);
+      if (fix) steps.push(fix);
+      if (at.status === 0) {
+        steps.push(
+          register(tree.users.registry, clean, address, zeroAddress, tree.resolver, BigInt(0), name),
+        );
+      }
+      if (primary !== name) steps.push(await primaryNameStep(client, pass, name));
       const tx = await sendWave(client, signer, steps, deadline);
       return { name, tx: tx ?? "" };
     } catch (error) {
@@ -851,8 +1051,10 @@ async function eventPlan(client: PublicClient, tree: Tree, event: string): Promi
 }
 
 /**
- * Registers a sealed picture: <label>.<event>.events.<root>, held by the bot, with the picture's
- * Swarm reference as contenthash and the seal's hash and the sealer's name as text records.
+ * Registers a sealed picture: <label>.<event>.events.<root>, with the picture's Swarm reference
+ * as contenthash and the seal's hash and the sealer's name (`by`, their user name) as text
+ * records. The picture's name is held by the sealer's address and points to it: the address
+ * record of `by`. "chain" when `by` has no address record.
  *
  * The event's name and registry are made here on first use, if missing. A first picture of an
  * event takes two waves (the event's registry must exist before a name goes in it): about two
@@ -880,6 +1082,18 @@ export function registerImage(
     const keys = treeKeys(tree.root);
     const texts = { [keys.seal]: seal, [keys.by]: image.by.trim() };
     try {
+      const sealer = await universal(
+        client,
+        texts[keys.by],
+        encodeFunctionData({
+          abi: profileAbi,
+          functionName: "addr",
+          args: [namehash(texts[keys.by]), ETH_COIN],
+        }),
+      );
+      const sealerBytes = sealer ? (decodeAbiParameters([{ type: "bytes" }], sealer.out)[0] as Hex) : "0x";
+      if (sealerBytes.length !== 42) throw new TreeError("chain", `${texts[keys.by]} has no address`);
+      const address = getAddress(sealerBytes);
       const plan = await eventPlan(client, tree, ev);
       let registered = false;
       if (plan.deployed) {
@@ -891,8 +1105,8 @@ export function registerImage(
           registered = true;
         }
       }
-      const fix = await missing(client, tree.resolver, name, texts, contenthash);
-      const own = register(plan.registry, clean, tree.bot, zeroAddress, tree.resolver, BigInt(0), name);
+      const fix = await missing(client, tree.resolver, name, texts, contenthash, address);
+      const own = register(plan.registry, clean, address, zeroAddress, tree.resolver, BigInt(0), name);
       const first = [...plan.first, ...(fix ? [fix] : [])];
       const second = [...plan.second];
       if (!registered) (plan.deployed ? first : second).push(own);
