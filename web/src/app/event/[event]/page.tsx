@@ -26,6 +26,7 @@ function Picture({ photo, url }: { photo: EventPhoto; url: string }) {
           <time className="soft" dateTime={photo.at}>
             {when(photo.at)}
           </time>
+          {photo.image?.state === "done" && <span className="mono">{photo.image.name}</span>}
         </figcaption>
       </figure>
     </li>
@@ -49,6 +50,8 @@ async function EventPart({ params }: { params: Promise<{ event: string }> }) {
     return <p className="state bad">The record of seals cannot be read just now. Try again later.</p>;
   }
   const { seals, groups } = listed;
+  // Once anyone here has a name, a person without one is shown as such, not by a number.
+  const anyNamed = groups.some((group) => group.name !== null);
   return (
     <>
       <dl className="seal">
@@ -66,7 +69,8 @@ async function EventPart({ params }: { params: Promise<{ event: string }> }) {
           {groups.map((group, i) => (
             <section className="others" key={group.photos[0].hash}>
               <h2>
-                Person {i + 1} — {count(group.photos.length, "photo", "photos")}
+                {group.name ?? (anyNamed ? "No name" : `Person ${i + 1}`)} —{" "}
+                {count(group.photos.length, "photo", "photos")}
               </h2>
               {group.photos.some((photo) => photo.picture) && (
                 <ol className="pictures">
@@ -113,7 +117,10 @@ export default function EventPage({ params }: { params: Promise<{ event: string 
         <EventPart params={params} />
       </Suspense>
       <footer className="notes">
-        <p>A person is known here only by their pass, which is not shown.</p>
+        <p>
+          A person is known here only by their pass, which is not shown, or by the name they took
+          with it.
+        </p>
         <p>This page says how many people stand behind the photos. It does not say who they are.</p>
         <p>
           A picture is kept on Swarm as the person&rsquo;s phone sent it. That it is the photo
