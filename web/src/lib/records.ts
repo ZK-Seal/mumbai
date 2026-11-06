@@ -4,6 +4,7 @@ import path from "node:path";
 import { ArkivStore, arkivSettings } from "@/lib/arkiv";
 import { normalName } from "@/lib/ens";
 import type { Credential } from "@/lib/world";
+import { isSwarmRef } from "@/lib/swarm";
 import { isSealHash } from "@/lib/world";
 
 /**
@@ -31,6 +32,46 @@ export interface RecordStore {
   byPass(pass: string): Promise<PassSeal[]>;
   /** The seals authorised at this event, oldest first, at most EVENT_LIST_LIMIT of them. */
   byEvent(event: string): Promise<EventSeal[]>;
+  /** The picture kept for this seal, or null if it has none. Throws a StoreError if unsure. */
+  getPicture(hash: string): Promise<PictureRecord | null>;
+  /** Keeps the pointer unless the seal already has a picture. Returns whichever pointer is kept. */
+  putPicture(picture: PictureRecord): Promise<PictureRecord>;
+  /** The pictures of seals authorised at this event, at most EVENT_LIST_LIMIT of them. */
+  picturesByEvent(event: string): Promise<PictureRecord[]>;
+}
+
+/**
+ * A pointer to the picture of one seal, kept apart from the seal's record because a record is
+ * never changed once written. The file itself is on Swarm under `ref`; `sha256` and `bytes` are
+ * those of the file as it was uploaded, so a picture fetched later can be checked against them.
+ * `event` is the event of the seal's record, so an event's pictures can be found in one look.
+ */
+export type PictureRecord = {
+  hash: string;
+  event: string | null;
+  ref: string;
+  sha256: string;
+  bytes: number;
+  at: string;
+};
+
+/** The largest picture kept, in bytes: below the request size a hosted server accepts. */
+export const PICTURE_MAX_BYTES = 3 * 1024 * 1024;
+
+/** The smallest picture kept, in bytes. */
+export const PICTURE_MIN_BYTES = 1024;
+
+/** A pointer as it may be kept: every field well formed, or it is not a pointer. */
+export function keptPicture(value: unknown, hash: string): PictureRecord | null {
+  const v = value as Partial<PictureRecord> | null;
+  if (v?.hash !== hash || !isSealHash(hash)) return null;
+  if (!isSwarmRef(v.ref) || typeof v.sha256 !== "string" || !/^[0-9a-f]{64}$/.test(v.sha256)) {
+    return null;
+  }
+  if (typeof v.bytes !== "number" || !Number.isSafeInteger(v.bytes) || v.bytes < 1) return null;
+  if (typeof v.at !== "string" || Number.isNaN(Date.parse(v.at))) return null;
+  const event = isEvent(v.event) ? v.event : null;
+  return { hash, event, ref: v.ref, sha256: v.sha256, bytes: v.bytes, at: v.at };
 }
 
 /** One seal in the list of seals a pass authorised. The edit is not kept, so it is not here. */
@@ -118,12 +159,35 @@ function readRecord(text: string, hash: string): SealRecord | null {
 }
 
 /**
- * Keeps each record as its own JSON file, named by the seal's hash. A record is written to a
- * temporary file and then linked into place, which fails if the name is taken: so the first
- * record for a hash wins, and a half-written file is never seen.
+ * Writes `text` as `<hash>.json` in `dir` unless that file is there already. The text goes to a
+ * temporary file that is then linked into place, which fails if the name is taken: so the first
+ * write for a hash wins, and a half-written file is never seen. True if this write is the one kept.
+ */
+async function writeOnce(dir: string, hash: string, text: string): Promise<boolean> {
+  if (!isSealHash(hash)) throw new Error("not a seal hash");
+  const temp = path.join(dir, `.${hash}.${randomBytes(6).toString("hex")}.tmp`);
+  try {
+    await mkdir(dir, { recursive: true });
+    await writeFile(temp, text, { flag: "wx" });
+    await link(temp, path.join(dir, `${hash}.json`));
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw new StoreError(error);
+    return false;
+  } finally {
+    await unlink(temp).catch(() => {});
+  }
+}
+
+/**
+ * Keeps each record as its own JSON file, named by the seal's hash, and each picture pointer the
+ * same way in a directory of its own. The first record, and the first pointer, for a hash wins.
  */
 export class FileStore implements RecordStore {
-  constructor(private readonly dir: string) {}
+  constructor(
+    private readonly dir: string,
+    private readonly pictureDir: string,
+  ) {}
 
   private file(hash: string): string {
     if (!isSealHash(hash)) throw new Error("not a seal hash");
@@ -142,28 +206,61 @@ export class FileStore implements RecordStore {
   }
 
   async put(record: SealRecord): Promise<SealRecord> {
-    const final = this.file(record.hash);
     const kept = await this.get(record.hash);
     if (kept) return kept;
-    await mkdir(this.dir, { recursive: true });
-    const temp = path.join(this.dir, `.${record.hash}.${randomBytes(6).toString("hex")}.tmp`);
     const { hash, pass, credential, account, at } = record;
     const name = keptName(record.name);
     const event = isEvent(record.event) ? record.event : null;
-    await writeFile(temp, JSON.stringify({ hash, pass, credential, account, name, event, at }), {
-      flag: "wx",
-    });
+    const fresh = { hash, pass, credential, account, name, event, at };
+    if (await writeOnce(this.dir, hash, JSON.stringify(fresh))) return fresh;
+    const other = await this.get(hash);
+    if (!other) throw new StoreError();
+    return other;
+  }
+
+  async getPicture(hash: string): Promise<PictureRecord | null> {
+    if (!isSealHash(hash)) throw new Error("not a seal hash");
+    let text: string;
     try {
-      await link(temp, final);
+      text = await readFile(path.join(this.pictureDir, `${hash}.json`), "utf8");
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw new StoreError(error);
-      const other = await this.get(record.hash);
-      if (!other) throw new StoreError(error);
-      return other;
-    } finally {
-      await unlink(temp).catch(() => {});
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+      throw new StoreError(error);
     }
-    return { hash, pass, credential, account, name, event, at };
+    try {
+      return keptPicture(JSON.parse(text), hash);
+    } catch {
+      return null;
+    }
+  }
+
+  async putPicture(picture: PictureRecord): Promise<PictureRecord> {
+    const fresh = keptPicture(picture, picture.hash);
+    if (!fresh) throw new Error("not a picture");
+    const kept = await this.getPicture(fresh.hash);
+    if (kept) return kept;
+    if (await writeOnce(this.pictureDir, fresh.hash, JSON.stringify(fresh))) return fresh;
+    const other = await this.getPicture(fresh.hash);
+    if (!other) throw new StoreError();
+    return other;
+  }
+
+  async picturesByEvent(event: string): Promise<PictureRecord[]> {
+    let names: string[];
+    try {
+      names = await readdir(this.pictureDir);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+      throw new StoreError(error);
+    }
+    const found: PictureRecord[] = [];
+    for (const name of names) {
+      const hash = name.endsWith(".json") ? name.slice(0, -5) : "";
+      if (!isSealHash(hash)) continue;
+      const picture = await this.getPicture(hash);
+      if (picture?.event === event) found.push(picture);
+    }
+    return found.slice(0, EVENT_LIST_LIMIT);
   }
 
   /** Every record kept in the directory. */
@@ -200,13 +297,14 @@ let store: RecordStore | null = null;
 
 /**
  * The store this server uses. With ARKIV_PRIVATE_KEY (or ARKIV_OWNER, to read only) the records
- * live on Arkiv; otherwise each is a file under DATA_DIR (default `.data`).
+ * and picture pointers live on Arkiv; otherwise each is a file under DATA_DIR (default `.data`).
  */
 export function records(): RecordStore {
   if (store) return store;
   const arkiv = arkivSettings();
+  const data = process.env.DATA_DIR || ".data";
   store = arkiv
     ? new ArkivStore(arkiv)
-    : new FileStore(path.resolve(process.env.DATA_DIR || ".data", "seals"));
+    : new FileStore(path.resolve(data, "seals"), path.resolve(data, "pictures"));
   return store;
 }

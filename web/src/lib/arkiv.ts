@@ -9,12 +9,14 @@ import {
   isAccount,
   isEvent,
   keptName,
+  keptPicture,
   newestFirst,
   oldestFirst,
   PASS_LIST_LIMIT,
   StoreError,
   type EventSeal,
   type PassSeal,
+  type PictureRecord,
   type RecordStore,
   type SealRecord,
 } from "@/lib/records";
@@ -34,6 +36,22 @@ export const Seals = defineSchema("blank-demo.seals", {
   at: u64().indexed(),
   name: str().indexed().optional(),
   event: str().indexed().optional(),
+});
+
+/**
+ * The pointer to one seal's picture on Arkiv, an entity of its own because a seal's record is
+ * read-only. Looked up by the seal and by the event, and ordered by time, so those are indexed;
+ * the Swarm reference, the file's SHA-256 and its size are only read back. The size is kept as
+ * `size`, since `bytes` is a word of the query language. The event is left out when the seal's
+ * record names none.
+ */
+export const Pictures = defineSchema("blank-demo.pictures", {
+  hash: str().indexed(),
+  event: str().indexed().optional(),
+  at: u64().indexed(),
+  ref: str(),
+  sha256: str(),
+  size: u64(),
 });
 
 // A record outlives the event by weeks, but is not kept forever.
@@ -112,6 +130,48 @@ function first(rows: readonly Row[]): SealRecord | null {
   return null;
 }
 
+type PictureRow = {
+  $key: Hex;
+  hash: { value: string };
+  event?: { value: string };
+  at: { value: bigint };
+  ref: { value: string };
+  sha256: { value: string };
+  size: { value: bigint };
+};
+
+/** A row as a picture pointer, or null if it does not say what a pointer must. */
+function toPicture(row: PictureRow): PictureRecord | null {
+  const ms = Number(row.at.value);
+  if (!Number.isSafeInteger(ms)) return null;
+  return keptPicture(
+    {
+      hash: row.hash.value,
+      event: row.event?.value ?? null,
+      ref: row.ref.value,
+      sha256: row.sha256.value,
+      bytes: Number(row.size.value),
+      at: new Date(ms).toISOString(),
+    },
+    row.hash.value,
+  );
+}
+
+/** The earliest of several rows, then the smallest key; as first() is for records. */
+function byTimeThenKey(a: PictureRow, b: PictureRow): number {
+  return a.at.value !== b.at.value ? (a.at.value < b.at.value ? -1 : 1) : a.$key < b.$key ? -1 : 1;
+}
+
+const PICTURE_COLUMNS = {
+  $key: true,
+  hash: true,
+  event: true,
+  at: true,
+  ref: true,
+  sha256: true,
+  size: true,
+} as const;
+
 /**
  * Keeps each record as an entity on Arkiv's testnet, owned by the server's wallet. Anyone may
  * write an entity that looks like ours, so every read asks only for entities this wallet owns.
@@ -122,6 +182,7 @@ export class ArkivStore implements RecordStore {
   private readonly chain;
   private readonly reader;
   private readonly pending = new Map<string, Promise<SealRecord>>();
+  private readonly pendingPictures = new Map<string, Promise<PictureRecord>>();
 
   constructor(private readonly settings: ArkivSettings) {
     this.chain = rabdi({ accessKey: settings.accessKey });
@@ -256,6 +317,104 @@ export class ArkivStore implements RecordStore {
     }
     // Read back: if another server wrote the same seal first, its record is the one kept.
     const written = await this.get(record.hash);
+    if (!written) throw new StoreError();
+    return written;
+  }
+  async getPicture(hash: string): Promise<PictureRecord | null> {
+    let rows: PictureRow[];
+    try {
+      const page = await this.reader
+        .select(PICTURE_COLUMNS)
+        .from(Pictures)
+        .where(eq("hash", hash))
+        .ownedBy(this.settings.owner)
+        .orderBy(asc("at"))
+        .limit(10)
+        .fetch();
+      rows = page.entities.filter((row) => row.hash.value === hash) as PictureRow[];
+    } catch (error) {
+      throw new StoreError(error);
+    }
+    for (const row of rows.sort(byTimeThenKey)) {
+      const picture = toPicture(row);
+      if (picture) return picture;
+    }
+    return null;
+  }
+
+  async picturesByEvent(event: string): Promise<PictureRecord[]> {
+    const rows: PictureRow[] = [];
+    try {
+      for (let offset = 0; offset < EVENT_LIST_LIMIT; ) {
+        const page = await this.reader
+          .select(PICTURE_COLUMNS)
+          .from(Pictures)
+          .where(eq("event", event))
+          .ownedBy(this.settings.owner)
+          .orderBy(asc("at"))
+          .limit(PAGE_SIZE)
+          .offset(offset)
+          .fetch();
+        for (const row of page.entities) {
+          if (row.event?.value === event) rows.push(row as PictureRow);
+        }
+        const covered = page.entities.length + page.skipped;
+        if (covered < PAGE_SIZE) break;
+        offset += covered;
+      }
+    } catch (error) {
+      throw new StoreError(error);
+    }
+    // One seal may have several rows; the earliest is the one kept, as in getPicture().
+    const seen = new Set<string>();
+    const pictures: PictureRecord[] = [];
+    for (const row of rows.sort(byTimeThenKey)) {
+      const picture = toPicture(row);
+      if (!picture || seen.has(picture.hash)) continue;
+      seen.add(picture.hash);
+      pictures.push(picture);
+    }
+    return pictures.slice(0, EVENT_LIST_LIMIT);
+  }
+
+  putPicture(picture: PictureRecord): Promise<PictureRecord> {
+    const waiting = this.pendingPictures.get(picture.hash);
+    if (waiting) return waiting;
+    const done = () => this.pendingPictures.delete(picture.hash);
+    const work = this.writePicture(picture).finally(done);
+    this.pendingPictures.set(picture.hash, work);
+    return work;
+  }
+
+  private async writePicture(picture: PictureRecord): Promise<PictureRecord> {
+    const fresh = keptPicture(picture, picture.hash);
+    if (!fresh) throw new Error("not a picture");
+    const kept = await this.getPicture(fresh.hash);
+    if (kept) return kept;
+    if (!this.settings.privateKey) throw new StoreError();
+    const writer = createWalletClient({
+      chain: this.chain,
+      transport: http(),
+      account: privateKeyToAccount(this.settings.privateKey),
+    });
+    try {
+      await writer.createEntity(
+        Pictures,
+        {
+          hash: fresh.hash,
+          at: u64(Date.parse(fresh.at)),
+          ref: fresh.ref,
+          sha256: fresh.sha256,
+          size: u64(fresh.bytes),
+          ...(fresh.event !== null ? { event: fresh.event } : {}),
+        },
+        { expiration: ExpirationTime.fromDays(RECORD_LIFETIME_DAYS), flags: { readonly: true } },
+      );
+    } catch (error) {
+      throw new StoreError(error);
+    }
+    // Read back: if another server kept a picture for this seal first, its pointer is the one kept.
+    const written = await this.getPicture(fresh.hash);
     if (!written) throw new StoreError();
     return written;
   }
