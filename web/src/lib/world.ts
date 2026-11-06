@@ -89,13 +89,16 @@ export function boundNullifier(
 
 /**
  * Asks World whether the proof is good. True only for a clear yes in the environment we expect,
- * and, when World names the action it checked, for this action.
+ * and, when World names the action it checked, for this action. A result made for another
+ * environment (a staging or sandbox proof on a production server, or the other way round) is
+ * refused before World is asked.
  */
 export async function worldAccepts(
   result: unknown,
   config: WorldConfig,
   action: string,
 ): Promise<boolean> {
+  if ((result as { environment?: unknown })?.environment !== config.environment) return false;
   let response: Response;
   try {
     response = await fetch(`https://developer.world.org/api/v4/verify/${config.rpId}`, {
