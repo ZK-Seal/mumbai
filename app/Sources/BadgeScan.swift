@@ -59,12 +59,12 @@ struct BadgeScanScreen: View {
         .task { allowed = await AVCaptureDevice.requestAccess(for: .video) }
     }
 
-    /// Only an https link on ethglobal.com or under it, with no user, password or port.
+    /// Only an https link on the badge's short host, or on ethglobal.com or under it, with no user, password or port.
     private static func isBadge(_ code: String) -> Bool {
         guard let parts = URLComponents(string: code), parts.scheme?.lowercased() == "https",
               parts.user == nil, parts.password == nil, parts.port == nil,
               let host = parts.host?.lowercased() else { return false }
-        return host == "ethglobal.com" || host.hasSuffix(".ethglobal.com")
+        return host == "ethglob.al" || host == "ethglobal.com" || host.hasSuffix(".ethglobal.com")
     }
 
     /// Lowercase hex of the SHA-256 of the code's exact text, as UTF-8.

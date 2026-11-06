@@ -31,8 +31,8 @@ When the web side is making an ENS name for a picture, the result shows "name be
 
 ## A badge for an event
 
-If an event is set, the app scans an ETHGlobal badge's QR code with the camera before the first photo goes to that event. It accepts only an https link on ethglobal.com. It never opens, shows, keeps or logs that link. It sends only the link's SHA-256 to the web side, as `entry`. The web side can check it against our own list.
-That shows a badge's link is on our list. It does not show that ETHGlobal issued the badge, or that the person holds it: a badge is worn in public, and anyone who photographs it can copy the link.
+If an event is set, the app scans an ETHGlobal badge's QR code with the camera before the first photo goes to that event. It accepts only an https link on ETHGlobal's own hosts, `ethglob.al` and `ethglobal.com`. It never opens, shows, keeps or logs that link. It sends only the link's SHA-256 to the web side, as `entry`. The web side can check it against our own list.
+That shows a badge's link is on our list. It does not show that ETHGlobal issued the badge, or that the person holds it: a badge is worn in public, and anyone who photographs it can copy the link. The link holds a short code, so its SHA-256 can be guessed. It is not a secret.
 
 ## The picture after authorising
 
