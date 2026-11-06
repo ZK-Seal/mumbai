@@ -65,21 +65,24 @@ export function requestContext(config: WorldConfig, action: string) {
   };
 }
 
-/** The value a proof must carry to belong to this seal and no other. */
-export function sealSignal(hash: string): string {
-  return hashSignal(hash).toLowerCase();
+/**
+ * The value a proof must carry to belong to one thing and no other: a seal's hash, or
+ * `user:<label>` for a user name.
+ */
+export function sealSignal(signal: string): string {
+  return hashSignal(signal).toLowerCase();
 }
 
 type ResponseItem = { identifier?: unknown; signal_hash?: unknown; nullifier?: unknown };
 
 /**
- * Picks the one answer we asked for out of a proof result, and checks it is tied to this seal
- * and made for this action. World checks the proof against the action and signal the result
- * names, so both must be ours. Returns its nullifier, or null if the result is not what was asked.
+ * Picks the one answer we asked for out of a proof result, and checks it is tied to this signal
+ * (a seal's hash, or `user:<label>`) and made for this action. World checks the proof against
+ * the action and signal the result names, so both must be ours. Returns its nullifier, or null if the result is not what was asked.
  */
 export function boundNullifier(
   result: unknown,
-  hash: string,
+  signal: string,
   config: WorldConfig,
   action: string,
 ): string | null {
@@ -88,7 +91,7 @@ export function boundNullifier(
   if (!Array.isArray(responses) || responses.length !== 1) return null;
   const item = responses[0] as ResponseItem;
   if (typeof item.signal_hash !== "string" || typeof item.nullifier !== "string") return null;
-  if (item.signal_hash.toLowerCase() !== sealSignal(hash)) return null;
+  if (item.signal_hash.toLowerCase() !== sealSignal(signal)) return null;
   const wanted = config.credential === "selfie" ? ["selfie"] : ["proof_of_human", "orb"];
   if (typeof item.identifier !== "string" || !wanted.includes(item.identifier)) return null;
   return item.nullifier;
@@ -123,6 +126,13 @@ export async function worldAccepts(
     | null;
   if (answer?.action !== undefined && answer.action !== action) return false;
   return answer?.success === true && answer.environment === config.environment;
+}
+
+/**
+ * The signal of a proof given for a user name. Its prefix keeps it apart from every seal hash.
+ */
+export function userSignal(label: string): string {
+  return `user:${label}`;
 }
 
 /**
