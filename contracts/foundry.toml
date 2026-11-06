@@ -1,0 +1,11 @@
+[profile.default]
+src = "src"
+test = "test"
+out = "out"
+libs = ["lib"]
+cache_path = "cache"
+solc = "0.8.29"
+auto_detect_solc = false
+evm_version = "cancun"
+optimizer = true
+optimizer_runs = 1000
