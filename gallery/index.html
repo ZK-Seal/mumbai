@@ -335,7 +335,7 @@ const ROOT_NAME = 'armanc.eth';
 // The names in the tree, in this order. A name shows as real only if Arkiv has a record for it. Otherwise it says "not yet".
 const USERS = ['armanc', 'abena', 'serhas'];
 const EVENTS = ['devcon', 'devconnect', 'ethglobal'];
-// Trial rows use names that start like this. They stay out of the tree, unless a link names a trial event.
+// Trial rows use names that start like this. They stay out of the tree, unless a link names a trial event. Other events do not show.
 const TRIAL_EVENT = 'test-';
 // How often the tree reads Arkiv again, and how long it waits after a refusal or an error. No error is shown for these.
 const READ_EVERY_MS = 20000;
@@ -1009,8 +1009,8 @@ function draw(linked) {
     rowsOf(rows.names, readImageName),
     rowsOf(rows.users, readUser),
   );
-  // Trial events stay out, unless the link names one.
-  const events = new Map([...model.events].filter(([slug]) => !slug.startsWith(TRIAL_EVENT) || slug === linked));
+  // Only the listed events show. A trial event shows only if the link names it.
+  const events = new Map([...model.events].filter(([slug]) => EVENTS.includes(slug) || (slug === linked && slug.startsWith(TRIAL_EVENT))));
   latest = { events, complete: rows.records.complete };
   namesOf = new Map();
   for (const person of model.named) addName(person.owner, person.label);
@@ -1043,8 +1043,6 @@ function draw(linked) {
       openEvent(first);
       limbsSign = null;
       ui.tree.querySelector('.split').replaceChildren(usersLimb(model.named, rows.users !== null), eventsLimb(events, latest.complete));
-    } else if (linked) {
-      ui.event.textContent = linked;
     }
   }
   paintLit();
