@@ -12,7 +12,6 @@ import {
   keptPicture,
   newestFirst,
   oldestFirst,
-  PASS_LIST_LIMIT,
   StoreError,
   type EventSeal,
   type PassSeal,
@@ -61,8 +60,8 @@ export const RECORD_LIFETIME_DAYS = 30;
 const PAGE_SIZE = 100;
 
 export type ArkivSettings = {
-  /** The wallet that writes, and so owns, every record. Only its records are believed. */
-  owner: Address;
+  /** The wallet that writes every record. Only records it created, read-only, are believed. */
+  creator: Address;
   /** The writing wallet's key; absent on a server that only reads. */
   privateKey: Hex | null;
   accessKey: string;
@@ -70,8 +69,8 @@ export type ArkivSettings = {
 
 /**
  * Reads the Arkiv settings from the environment. Null when neither ARKIV_PRIVATE_KEY nor
- * ARKIV_OWNER is set. Throws a StoreError when one is set but is not well formed, so a typo never
- * quietly falls back to another store.
+ * ARKIV_OWNER (the address of the writing wallet, to read only) is set. Throws a StoreError when
+ * one is set but is not well formed, so a typo never quietly falls back to another store.
  */
 export function arkivSettings(): ArkivSettings | null {
   const key = process.env.ARKIV_PRIVATE_KEY ?? "";
@@ -80,17 +79,48 @@ export function arkivSettings(): ArkivSettings | null {
   if (key !== "") {
     if (!/^0x[0-9a-fA-F]{64}$/.test(key)) throw new StoreError();
     const privateKey = key as Hex;
-    return { owner: privateKeyToAccount(privateKey).address, privateKey, accessKey };
+    return { creator: privateKeyToAccount(privateKey).address, privateKey, accessKey };
   }
   if (owner !== "") {
     if (!isAddress(owner)) throw new StoreError();
-    return { owner: getAddress(owner), privateKey: null, accessKey };
+    return { creator: getAddress(owner), privateKey: null, accessKey };
   }
   return null;
 }
 
-type Row = {
+/** What every row is read with: who created it, how, and when. */
+type Provenance = {
   $key: Hex;
+  $creator: Hex;
+  $creationFlags: { readonly: boolean };
+  $createdAt: bigint;
+};
+
+const PROVENANCE = {
+  $key: true,
+  $creator: true,
+  $creationFlags: true,
+  $createdAt: true,
+} as const;
+
+/**
+ * Whether a row may be believed: created by our wallet, and created read-only, so no one has
+ * changed it since. Its owner is not asked: ownership can be handed to us without our consent.
+ */
+function trusted(row: Provenance, creator: Address): boolean {
+  return row.$creator.toLowerCase() === creator.toLowerCase() && row.$creationFlags.readonly;
+}
+
+/**
+ * Earliest created first: by the block it was created in, which the writer does not choose, then
+ * by key. The node can neither filter nor sort on the creation block, so this is done here.
+ */
+function byCreation(a: Provenance, b: Provenance): number {
+  if (a.$createdAt !== b.$createdAt) return a.$createdAt < b.$createdAt ? -1 : 1;
+  return a.$key < b.$key ? -1 : a.$key > b.$key ? 1 : 0;
+}
+
+type Row = Provenance & {
   hash: { value: string };
   pass: { value: string };
   account: { value: string };
@@ -99,6 +129,17 @@ type Row = {
   name?: { value: string };
   event?: { value: string };
 };
+
+const SEAL_COLUMNS = {
+  ...PROVENANCE,
+  hash: true,
+  pass: true,
+  account: true,
+  credential: true,
+  at: true,
+  name: true,
+  event: true,
+} as const;
 
 /** A row as a record, or null if it does not say what a record must. */
 function toRecord(row: Row): SealRecord | null {
@@ -118,20 +159,7 @@ function toRecord(row: Row): SealRecord | null {
   };
 }
 
-/** The first of several rows for one seal: the earliest time, then the smallest key. */
-function first(rows: readonly Row[]): SealRecord | null {
-  const sorted = [...rows].sort((a, b) =>
-    a.at.value !== b.at.value ? (a.at.value < b.at.value ? -1 : 1) : a.$key < b.$key ? -1 : 1,
-  );
-  for (const row of sorted) {
-    const record = toRecord(row);
-    if (record) return record;
-  }
-  return null;
-}
-
-type PictureRow = {
-  $key: Hex;
+type PictureRow = Provenance & {
   hash: { value: string };
   event?: { value: string };
   at: { value: bigint };
@@ -139,6 +167,16 @@ type PictureRow = {
   sha256: { value: string };
   size: { value: bigint };
 };
+
+const PICTURE_COLUMNS = {
+  ...PROVENANCE,
+  hash: true,
+  event: true,
+  at: true,
+  ref: true,
+  sha256: true,
+  size: true,
+} as const;
 
 /** A row as a picture pointer, or null if it does not say what a pointer must. */
 function toPicture(row: PictureRow): PictureRecord | null {
@@ -157,26 +195,21 @@ function toPicture(row: PictureRow): PictureRecord | null {
   );
 }
 
-/** The earliest of several rows, then the smallest key; as first() is for records. */
-function byTimeThenKey(a: PictureRow, b: PictureRow): number {
-  return a.at.value !== b.at.value ? (a.at.value < b.at.value ? -1 : 1) : a.$key < b.$key ? -1 : 1;
+/** The first row per seal, in order of creation. */
+function firstPerSeal<T extends Provenance & { hash: { value: string } }>(rows: T[]): T[] {
+  const seen = new Set<string>();
+  return [...rows].sort(byCreation).filter((row) => {
+    if (seen.has(row.hash.value)) return false;
+    seen.add(row.hash.value);
+    return true;
+  });
 }
 
-const PICTURE_COLUMNS = {
-  $key: true,
-  hash: true,
-  event: true,
-  at: true,
-  ref: true,
-  sha256: true,
-  size: true,
-} as const;
-
 /**
- * Keeps each record as an entity on Arkiv's testnet, owned by the server's wallet. Anyone may
- * write an entity that looks like ours, so every read asks only for entities this wallet owns.
- * An entity is written read-only: no one, the owner included, can change it after the fact; the
- * owner can only let it expire or delete it.
+ * Keeps each record as an entity on Arkiv's testnet, created read-only by the server's wallet.
+ * Anyone may write an entity that looks like ours, and may hand it to our wallet, so every read
+ * asks only for entities our wallet created, and believes only those created read-only: no one,
+ * the creator included, can change such an entity after the fact.
  */
 export class ArkivStore implements RecordStore {
   private readonly chain;
@@ -186,55 +219,56 @@ export class ArkivStore implements RecordStore {
 
   constructor(private readonly settings: ArkivSettings) {
     this.chain = rabdi({ accessKey: settings.accessKey });
-    this.reader = createPublicClient({ chain: this.chain, transport: http() });
+    this.reader = createPublicClient({ chain: this.chain, transport: http(), cacheTime: 0 });
+  }
+
+  private seals() {
+    return this.reader.select(SEAL_COLUMNS).from(Seals).createdBy(this.settings.creator);
+  }
+
+  private pictures() {
+    return this.reader.select(PICTURE_COLUMNS).from(Pictures).createdBy(this.settings.creator);
+  }
+
+  private believed<T extends Provenance>(rows: readonly unknown[]): T[] {
+    return (rows as T[]).filter((row) => trusted(row, this.settings.creator));
   }
 
   private async rows(hash: string): Promise<Row[]> {
     try {
-      const page = await this.reader
-        .select({
-          $key: true,
-          hash: true,
-          pass: true,
-          account: true,
-          credential: true,
-          at: true,
-          name: true,
-          event: true,
-        })
-        .from(Seals)
+      const page = await this.seals()
         .where(eq("hash", hash))
-        .ownedBy(this.settings.owner)
-        .orderBy(asc("at"))
-        .limit(10)
+        .orderBy(asc("$key"))
+        .limit(PAGE_SIZE)
         .fetch();
-      return page.entities.filter((row) => row.hash.value === hash) as Row[];
+      return this.believed<Row>(page.entities).filter((row) => row.hash.value === hash);
     } catch (error) {
       throw new StoreError(error);
     }
   }
 
   async get(hash: string): Promise<SealRecord | null> {
-    return first(await this.rows(hash));
+    for (const row of (await this.rows(hash)).sort(byCreation)) {
+      const record = toRecord(row);
+      if (record) return record;
+    }
+    return null;
   }
 
   async byPass(pass: string): Promise<PassSeal[]> {
-    let rows;
+    let rows: Row[];
     try {
-      const page = await this.reader
-        .select({ hash: true, pass: true, at: true })
-        .from(Seals)
+      const page = await this.seals()
         .where(eq("pass", pass))
-        .ownedBy(this.settings.owner)
         .orderBy(desc("at"))
-        .limit(PASS_LIST_LIMIT)
+        .limit(PAGE_SIZE)
         .fetch();
-      rows = page.entities;
+      rows = this.believed<Row>(page.entities);
     } catch (error) {
       throw new StoreError(error);
     }
     const seals: PassSeal[] = [];
-    for (const row of rows) {
+    for (const row of firstPerSeal(rows)) {
       const ms = Number(row.at.value);
       if (row.pass.value !== pass || !isSealHash(row.hash.value) || !Number.isSafeInteger(ms)) {
         continue;
@@ -246,19 +280,18 @@ export class ArkivStore implements RecordStore {
 
   async byEvent(event: string): Promise<EventSeal[]> {
     // A page holds at most PAGE_SIZE rows, so read page after page, oldest first, to the limit.
-    const rows: { hash: { value: string }; pass: { value: string }; at: { value: bigint } }[] = [];
+    const rows: Row[] = [];
     try {
       for (let offset = 0; offset < EVENT_LIST_LIMIT; ) {
-        const page = await this.reader
-          .select({ $key: true, hash: true, pass: true, at: true, event: true })
-          .from(Seals)
+        const page = await this.seals()
           .where(eq("event", event))
-          .ownedBy(this.settings.owner)
           .orderBy(asc("at"))
           .limit(PAGE_SIZE)
           .offset(offset)
           .fetch();
-        for (const row of page.entities) if (row.event?.value === event) rows.push(row);
+        for (const row of this.believed<Row>(page.entities)) {
+          if (row.event?.value === event) rows.push(row);
+        }
         const covered = page.entities.length + page.skipped;
         if (covered < PAGE_SIZE) break;
         offset += covered;
@@ -266,15 +299,11 @@ export class ArkivStore implements RecordStore {
     } catch (error) {
       throw new StoreError(error);
     }
-    // One seal may have several rows; the earliest is the one kept, as in get().
-    const seen = new Set<string>();
+    // One seal may have several rows; the first created is the one kept, as in get().
     const seals: EventSeal[] = [];
-    for (const row of rows) {
+    for (const row of firstPerSeal(rows)) {
       const ms = Number(row.at.value);
-      if (!isSealHash(row.hash.value) || !Number.isSafeInteger(ms) || seen.has(row.hash.value)) {
-        continue;
-      }
-      seen.add(row.hash.value);
+      if (!isSealHash(row.hash.value) || !Number.isSafeInteger(ms)) continue;
       seals.push({ hash: row.hash.value, pass: row.pass.value, at: new Date(ms).toISOString() });
     }
     return oldestFirst(seals);
@@ -290,6 +319,15 @@ export class ArkivStore implements RecordStore {
   }
 
   private async write(record: SealRecord): Promise<SealRecord> {
+    const values = {
+      hash: record.hash,
+      pass: record.pass,
+      account: record.account ?? "",
+      credential: record.credential,
+      at: u64(Date.parse(record.at)),
+      ...(keptName(record.name) ? { name: record.name as string } : {}),
+      ...(isEvent(record.event) ? { event: record.event } : {}),
+    };
     const kept = await this.get(record.hash);
     if (kept) return kept;
     if (!this.settings.privateKey) throw new StoreError();
@@ -301,16 +339,11 @@ export class ArkivStore implements RecordStore {
     try {
       await writer.createEntity(
         Seals,
+        values,
         {
-          hash: record.hash,
-          pass: record.pass,
-          account: record.account ?? "",
-          credential: record.credential,
-          at: u64(Date.parse(record.at)),
-          ...(keptName(record.name) ? { name: record.name as string } : {}),
-          ...(isEvent(record.event) ? { event: record.event } : {}),
+          expiration: ExpirationTime.fromDays(RECORD_LIFETIME_DAYS),
+          flags: { readonly: true, permissionlessExtension: false },
         },
-        { expiration: ExpirationTime.fromDays(RECORD_LIFETIME_DAYS), flags: { readonly: true } },
       );
     } catch (error) {
       throw new StoreError(error);
@@ -320,22 +353,20 @@ export class ArkivStore implements RecordStore {
     if (!written) throw new StoreError();
     return written;
   }
+
   async getPicture(hash: string): Promise<PictureRecord | null> {
     let rows: PictureRow[];
     try {
-      const page = await this.reader
-        .select(PICTURE_COLUMNS)
-        .from(Pictures)
+      const page = await this.pictures()
         .where(eq("hash", hash))
-        .ownedBy(this.settings.owner)
-        .orderBy(asc("at"))
-        .limit(10)
+        .orderBy(asc("$key"))
+        .limit(PAGE_SIZE)
         .fetch();
-      rows = page.entities.filter((row) => row.hash.value === hash) as PictureRow[];
+      rows = this.believed<PictureRow>(page.entities).filter((row) => row.hash.value === hash);
     } catch (error) {
       throw new StoreError(error);
     }
-    for (const row of rows.sort(byTimeThenKey)) {
+    for (const row of rows.sort(byCreation)) {
       const picture = toPicture(row);
       if (picture) return picture;
     }
@@ -346,17 +377,14 @@ export class ArkivStore implements RecordStore {
     const rows: PictureRow[] = [];
     try {
       for (let offset = 0; offset < EVENT_LIST_LIMIT; ) {
-        const page = await this.reader
-          .select(PICTURE_COLUMNS)
-          .from(Pictures)
+        const page = await this.pictures()
           .where(eq("event", event))
-          .ownedBy(this.settings.owner)
           .orderBy(asc("at"))
           .limit(PAGE_SIZE)
           .offset(offset)
           .fetch();
-        for (const row of page.entities) {
-          if (row.event?.value === event) rows.push(row as PictureRow);
+        for (const row of this.believed<PictureRow>(page.entities)) {
+          if (row.event?.value === event) rows.push(row);
         }
         const covered = page.entities.length + page.skipped;
         if (covered < PAGE_SIZE) break;
@@ -365,14 +393,11 @@ export class ArkivStore implements RecordStore {
     } catch (error) {
       throw new StoreError(error);
     }
-    // One seal may have several rows; the earliest is the one kept, as in getPicture().
-    const seen = new Set<string>();
+    // One seal may have several rows; the first created is the one kept, as in getPicture().
     const pictures: PictureRecord[] = [];
-    for (const row of rows.sort(byTimeThenKey)) {
+    for (const row of firstPerSeal(rows)) {
       const picture = toPicture(row);
-      if (!picture || seen.has(picture.hash)) continue;
-      seen.add(picture.hash);
-      pictures.push(picture);
+      if (picture) pictures.push(picture);
     }
     return pictures.slice(0, EVENT_LIST_LIMIT);
   }
@@ -389,6 +414,14 @@ export class ArkivStore implements RecordStore {
   private async writePicture(picture: PictureRecord): Promise<PictureRecord> {
     const fresh = keptPicture(picture, picture.hash);
     if (!fresh) throw new Error("not a picture");
+    const values = {
+      hash: fresh.hash,
+      at: u64(Date.parse(fresh.at)),
+      ref: fresh.ref,
+      sha256: fresh.sha256,
+      size: u64(fresh.bytes),
+      ...(fresh.event !== null ? { event: fresh.event } : {}),
+    };
     const kept = await this.getPicture(fresh.hash);
     if (kept) return kept;
     if (!this.settings.privateKey) throw new StoreError();
@@ -400,15 +433,11 @@ export class ArkivStore implements RecordStore {
     try {
       await writer.createEntity(
         Pictures,
+        values,
         {
-          hash: fresh.hash,
-          at: u64(Date.parse(fresh.at)),
-          ref: fresh.ref,
-          sha256: fresh.sha256,
-          size: u64(fresh.bytes),
-          ...(fresh.event !== null ? { event: fresh.event } : {}),
+          expiration: ExpirationTime.fromDays(RECORD_LIFETIME_DAYS),
+          flags: { readonly: true, permissionlessExtension: false },
         },
-        { expiration: ExpirationTime.fromDays(RECORD_LIFETIME_DAYS), flags: { readonly: true } },
       );
     } catch (error) {
       throw new StoreError(error);
