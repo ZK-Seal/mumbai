@@ -143,6 +143,8 @@ export function Authorise(props: {
   edit: Edit;
   width: number;
   height: number;
+  /** The event the photo was sealed at, if the link named one. */
+  event: string | null;
   /** The pass already on record for this seal, if a person authorised it before. */
   pass: string | null;
   /** The name kept with that record, if a desk vouched for it. */
@@ -152,11 +154,13 @@ export function Authorise(props: {
   signin: SigninNow;
   word: SigninWord | null;
 }) {
-  const { hash } = props;
+  const { hash, event } = props;
   const [signin, setSignin] = useState<SigninNow>(props.signin);
   const [word, setWord] = useState<SigninWord | null>(props.word);
   const signinRefused = useRef(false);
-  const back = `/authorise?hash=${hash}&edit=${props.edit}&w=${props.width}&h=${props.height}`;
+  const back =
+    `/authorise?hash=${hash}&edit=${props.edit}&w=${props.width}&h=${props.height}` +
+    (event ? `&event=${event}` : "");
   const startUrl = `/api/auth/start?return=${encodeURIComponent(back)}`;
 
   /** The server said the sign-in is missing, too old or of the wrong class. */
@@ -193,7 +197,7 @@ export function Authorise(props: {
     pass.current = null;
     let answer: unknown;
     try {
-      answer = await post("/api/world/request", { hash });
+      answer = await post("/api/world/request", event ? { hash, event } : { hash });
     } catch {
       setPhase({ name: "denied" });
       return;
@@ -218,7 +222,7 @@ export function Authorise(props: {
 
   async function check(result: IDKitResult) {
     const name = given.trim();
-    const body = name ? { hash, result, name } : { hash, result };
+    const body = { hash, result, ...(name ? { name } : {}), ...(event ? { event } : {}) };
     const answer = (await post("/api/world/verify", body)) as {
       state?: unknown;
       reason?: unknown;
@@ -256,6 +260,16 @@ export function Authorise(props: {
         </dd>
         <dt>Seal</dt>
         <dd className="mono">{hash}</dd>
+        {event && (
+          <>
+            <dt>Event</dt>
+            <dd>
+              <a href={`/event/${event}`} className="mono">
+                {event}
+              </a>
+            </dd>
+          </>
+        )}
       </dl>
 
       {signin.standing !== "not-set-up" && phase.name !== "verified" && (

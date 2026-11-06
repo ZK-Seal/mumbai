@@ -1,13 +1,13 @@
 import { Suspense } from "react";
 import { deskName } from "@/lib/ens";
-import { records, type SealRecord } from "@/lib/records";
+import { isEvent, records, type SealRecord } from "@/lib/records";
 import { gate } from "@/lib/signin";
 import { isSealHash } from "@/lib/world";
 import { Authorise, type Edit, type SigninNow, type SigninWord } from "./authorise";
 
 type Query = Record<string, string | string[] | undefined>;
 
-type Seal = { hash: string; edit: Edit; width: number; height: number };
+type Seal = { hash: string; edit: Edit; width: number; height: number; event: string | null };
 
 /** A side of the photo in pixels: a whole number from 1 to 99999, written plainly. */
 function side(value: string | string[] | undefined): number | null {
@@ -17,13 +17,14 @@ function side(value: string | string[] | undefined): number | null {
 
 /** Reads the link the app opened. Null unless every part is exactly what the app sends. */
 function readSeal(query: Query): Seal | null {
-  const { hash, edit, w, h } = query;
+  const { hash, edit, w, h, event } = query;
   if (!isSealHash(hash)) return null;
   if (edit !== "blank" && edit !== "blur") return null;
   const width = side(w);
   const height = side(h);
   if (width === null || height === null) return null;
-  return { hash, edit, width, height };
+  if (event !== undefined && !isEvent(event)) return null;
+  return { hash, edit, width, height, event: event ?? null };
 }
 
 const WORDS: SigninWord[] = ["denied", "expired", "failed", "class"];
@@ -57,6 +58,7 @@ async function SealPart({ searchParams }: { searchParams: Promise<Query> }) {
       edit={seal.edit}
       width={seal.width}
       height={seal.height}
+      event={kept ? kept.event : seal.event}
       pass={kept?.pass ?? null}
       member={kept?.name ?? null}
       desk={deskName()}

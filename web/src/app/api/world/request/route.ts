@@ -1,4 +1,4 @@
-import { records, type SealRecord } from "@/lib/records";
+import { isEvent, records, type SealRecord } from "@/lib/records";
 import { actingAccount } from "@/lib/signin";
 import { isSealHash, requestContext, worldConfig } from "@/lib/world";
 
@@ -8,9 +8,14 @@ import { isSealHash, requestContext, worldConfig } from "@/lib/world";
  * signed in with World in the last few minutes, with the required verification, may start.
  */
 export async function POST(request: Request) {
-  const body = (await request.json().catch(() => null)) as { hash?: unknown } | null;
+  const body = (await request.json().catch(() => null)) as
+    | { hash?: unknown; event?: unknown }
+    | null;
   if (!isSealHash(body?.hash)) {
     return Response.json({ state: "refused", reason: "hash" }, { status: 400 });
+  }
+  if (body.event !== undefined && !isEvent(body.event)) {
+    return Response.json({ state: "refused", reason: "event" }, { status: 400 });
   }
   let kept: SealRecord | null;
   try {
@@ -25,6 +30,7 @@ export async function POST(request: Request) {
       credential: kept.credential,
       account: kept.account,
       name: kept.name,
+      event: kept.event,
       at: kept.at,
     });
   }

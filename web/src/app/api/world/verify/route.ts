@@ -1,5 +1,5 @@
 import { deskName, deskOf, ethClient, vouch, type Vouch } from "@/lib/ens";
-import { records, type SealRecord } from "@/lib/records";
+import { isEvent, records, type SealRecord } from "@/lib/records";
 import { actingAccount } from "@/lib/signin";
 import { boundNullifier, isSealHash, worldAccepts, worldConfig } from "@/lib/world";
 
@@ -13,6 +13,7 @@ function verified(record: SealRecord, asked: Vouch | null = null) {
     name: record.name,
     desk: record.name ? deskOf(record.name) : deskName(),
     vouch: asked,
+    event: record.event,
     at: record.at,
   });
 }
@@ -35,11 +36,15 @@ function storeFailed() {
  */
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as
-    | { hash?: unknown; result?: unknown; name?: unknown }
+    | { hash?: unknown; result?: unknown; name?: unknown; event?: unknown }
     | null;
   if (!isSealHash(body?.hash)) {
     return Response.json({ state: "refused", reason: "hash" }, { status: 400 });
   }
+  if (body.event !== undefined && !isEvent(body.event)) {
+    return Response.json({ state: "refused", reason: "event" }, { status: 400 });
+  }
+  const event = isEvent(body.event) ? body.event : null;
   const config = worldConfig();
   if (!config) {
     return Response.json({ state: "refused", reason: "not-set-up" }, { status: 503 });
@@ -80,7 +85,7 @@ export async function POST(request: Request) {
       credential: config.credential,
       account,
       name,
-      event: null,
+      event,
       at: new Date().toISOString(),
     });
   } catch {

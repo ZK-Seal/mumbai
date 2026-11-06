@@ -1,7 +1,10 @@
 import { records, type SealRecord } from "@/lib/records";
 import { isSealHash } from "@/lib/world";
 
-/** Says whether a person has authorised this seal, with which pass and which account. */
+/**
+ * Says whether a person has authorised this seal, with which pass and which account, and at
+ * which event.
+ */
 export async function GET(_request: Request, { params }: { params: Promise<{ hash: string }> }) {
   const { hash } = await params;
   if (!isSealHash(hash)) {
@@ -20,6 +23,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ has
     credential: record.credential,
     account: record.account,
     name: record.name,
+    event: record.event,
     at: record.at,
   });
 }
