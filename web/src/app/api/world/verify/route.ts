@@ -35,14 +35,15 @@ function storeFailed() {
 
 /**
  * Finishes one authorisation. The proof must be tied to this seal's hash and made for the
- * action the request route handed out (see actionFor), and World must accept it. Every answer is a word from a short fixed list. The first authorisation of a seal
- * is kept; a later one gets the kept record back and changes nothing. No account is kept with
- * the record.
+ * action the request route handed out (see actionFor), and World must accept it. Every answer
+ * is a word from a short fixed list. The first authorisation of a seal is kept; a later one gets
+ * the kept record back and changes nothing. No account is kept with the record.
  *
  * A person may also give their name at the desk. The name is kept with the record only when the
  * desk vouches for it, as the chain says now: it is a member of the desk, and it carries this
- * authorisation's pass. A name the desk does not vouch for is dropped;
- * the authorisation itself still stands.
+ * authorisation's pass. A name the desk does not vouch for is dropped; the authorisation itself
+ * still stands. When no name is given, the record keeps the person's user name, the one their
+ * pass holds, or null when they have none.
  *
  * The answer that keeps a new record also carries `picture_token`, which lets this client upload
  * the seal's picture. An answer with a record kept before never carries it: anyone can reach that
@@ -87,6 +88,12 @@ export async function POST(request: Request) {
       : { vouch: "not-vouched" as const, name: null };
     asked = answer.vouch;
     name = answer.name;
+  } else {
+    try {
+      name = (await records().userByPass(nullifier))?.name ?? null;
+    } catch {
+      return storeFailed();
+    }
   }
   const at = new Date().toISOString();
   let record: SealRecord;

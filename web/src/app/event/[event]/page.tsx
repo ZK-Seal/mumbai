@@ -1,14 +1,6 @@
 import { Suspense } from "react";
 import { connection } from "next/server";
-import {
-  byPerson,
-  isEvent,
-  records,
-  withPictures,
-  type EventPhoto,
-  type EventSeal,
-  type PictureRecord,
-} from "@/lib/records";
+import { eventPhotos, isEvent, type EventPhoto } from "@/lib/records";
 
 function shortHash(hash: string): string {
   return `${hash.slice(0, 10)}…${hash.slice(-6)}`;
@@ -50,17 +42,13 @@ async function EventPart({ params }: { params: Promise<{ event: string }> }) {
   if (!isEvent(event)) {
     return <p className="state bad">This link does not name an event.</p>;
   }
-  let seals: EventSeal[];
-  let pictures: PictureRecord[];
+  let listed: Awaited<ReturnType<typeof eventPhotos>>;
   try {
-    [seals, pictures] = await Promise.all([
-      records().byEvent(event),
-      records().picturesByEvent(event),
-    ]);
+    listed = await eventPhotos(event);
   } catch {
     return <p className="state bad">The record of seals cannot be read just now. Try again later.</p>;
   }
-  const groups = withPictures(byPerson(seals), pictures);
+  const { seals, groups } = listed;
   return (
     <>
       <dl className="seal">

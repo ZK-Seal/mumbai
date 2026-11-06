@@ -78,7 +78,8 @@ type ResponseItem = { identifier?: unknown; signal_hash?: unknown; nullifier?: u
 /**
  * Picks the one answer we asked for out of a proof result, and checks it is tied to this signal
  * (a seal's hash, or `user:<label>`) and made for this action. World checks the proof against
- * the action and signal the result names, so both must be ours. Returns its nullifier, or null if the result is not what was asked.
+ * the action and signal the result names, so both must be ours. Returns its nullifier, or null
+ * if the result is not what was asked.
  */
 export function boundNullifier(
   result: unknown,

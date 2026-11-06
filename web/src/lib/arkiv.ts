@@ -23,12 +23,14 @@ import {
   isAccount,
   isEvent,
   keptName,
+  keptImageName,
   keptPicture,
   keptUser,
   newestFirst,
   oldestFirst,
   StoreError,
   type EventSeal,
+  type NameRecord,
   type PassSeal,
   type PictureRecord,
   type RecordStore,
@@ -78,6 +80,18 @@ export const Users = defineSchema("blank-demo.users", {
   pass: str().indexed(),
   at: u64().indexed(),
   name: str(),
+});
+
+/**
+ * The name one seal's photo was given on chain. Looked up by the seal and by the event, and
+ * sorted by time, so those are indexed; the name and its transaction are only read back.
+ */
+export const Names = defineSchema("blank-demo.names", {
+  hash: str().indexed(),
+  event: str().indexed(),
+  at: u64().indexed(),
+  name: str(),
+  tx: str(),
 });
 
 /** The most user rows read when deciding who holds a name. */
@@ -302,6 +316,38 @@ function holdingUsers(rows: UserRow[]): UserRecord[] {
   return users;
 }
 
+type NameRow = Provenance & {
+  hash: { value: string };
+  event: { value: string };
+  at: { value: bigint };
+  name: { value: string };
+  tx: { value: string };
+};
+
+const NAME_COLUMNS = {
+  ...PROVENANCE,
+  hash: true,
+  event: true,
+  at: true,
+  name: true,
+  tx: true,
+} as const;
+
+function toImageName(row: NameRow): NameRecord | null {
+  const ms = Number(row.at.value);
+  if (!Number.isSafeInteger(ms)) return null;
+  return keptImageName(
+    {
+      hash: row.hash.value,
+      event: row.event.value,
+      name: row.name.value,
+      tx: row.tx.value,
+      at: new Date(ms).toISOString(),
+    },
+    row.hash.value,
+  );
+}
+
 /** One page of rows as the node answers it. */
 type Page = { entities: readonly unknown[]; skipped: number };
 
@@ -411,6 +457,7 @@ export class ArkivStore implements RecordStore {
   private readonly pending = new Map<string, Promise<SealRecord>>();
   private readonly pendingPictures = new Map<string, Promise<PictureRecord>>();
   private readonly pendingUsers = new Map<string, Promise<UserRecord>>();
+  private readonly pendingNames = new Map<string, Promise<NameRecord>>();
 
   constructor(private readonly settings: ArkivSettings) {
     announce(settings);
@@ -435,6 +482,10 @@ export class ArkivStore implements RecordStore {
 
   private users() {
     return this.reader.select(USER_COLUMNS).from(Users).createdBy(this.settings.creator);
+  }
+
+  private names() {
+    return this.reader.select(NAME_COLUMNS).from(Names).createdBy(this.settings.creator);
   }
 
   private believed<T extends Provenance>(rows: readonly unknown[]): T[] {
@@ -670,11 +721,76 @@ export class ArkivStore implements RecordStore {
     const find = async () => {
       const users = await this.holding();
       return (
-        users.find((u) => u.label === fresh.label) ?? users.find((u) => u.pass === fresh.pass) ?? null
+        users.find((u) => u.label === fresh.label) ??
+        users.find((u) => u.pass === fresh.pass) ??
+        null
       );
     };
     return this.keep(find, (wallet, txParams) =>
       wallet.createEntity(Users, values, CREATE_OPTIONS, txParams),
+    );
+  }
+
+  async getName(hash: string): Promise<NameRecord | null> {
+    const rows = await this.pages<NameRow>(
+      (offset) =>
+        this.names()
+          .where(eq("hash", hash))
+          .orderBy(asc("$key"))
+          .limit(PAGE_SIZE)
+          .offset(offset)
+          .fetch(),
+      (row) => row.hash.value === hash,
+      PAGE_SIZE,
+    );
+    for (const row of rows.sort(byCreation)) {
+      const name = toImageName(row);
+      if (name) return name;
+    }
+    return null;
+  }
+
+  async namesByEvent(event: string): Promise<NameRecord[]> {
+    const rows = await this.pages<NameRow>(
+      (offset) =>
+        this.names()
+          .where(eq("event", event))
+          .orderBy(asc("at"))
+          .limit(PAGE_SIZE)
+          .offset(offset)
+          .fetch(),
+      (row) => row.event.value === event,
+    );
+    // One seal may have several rows; the first created is the one kept, as in getName().
+    const names: NameRecord[] = [];
+    for (const row of firstPerSeal(rows)) {
+      const name = toImageName(row);
+      if (name) names.push(name);
+    }
+    return names.slice(0, EVENT_LIST_LIMIT);
+  }
+
+  putName(name: NameRecord): Promise<NameRecord> {
+    return this.once(this.pendingNames, name.hash, () => this.writeName(name));
+  }
+
+  private async writeName(name: NameRecord): Promise<NameRecord> {
+    const fresh = keptImageName(name, name.hash);
+    const ms = fresh ? Date.parse(fresh.at) : NaN;
+    if (!fresh || !Number.isSafeInteger(ms) || ms < 0) throw new Error("not a name");
+    if (![fresh.hash, fresh.event, fresh.name, fresh.tx].every(fitsStr)) {
+      throw new Error("not a name");
+    }
+    const values = {
+      hash: fresh.hash,
+      event: fresh.event,
+      at: u64(ms),
+      name: fresh.name,
+      tx: fresh.tx,
+    };
+    return this.keep(
+      () => this.getName(fresh.hash),
+      (wallet, txParams) => wallet.createEntity(Names, values, CREATE_OPTIONS, txParams),
     );
   }
 

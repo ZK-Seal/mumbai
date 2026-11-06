@@ -47,6 +47,45 @@ export interface RecordStore {
   userByLabel(label: string): Promise<UserRecord | null>;
   /** The user kept for this pass, or null. Throws a StoreError if unsure. */
   userByPass(pass: string): Promise<UserRecord | null>;
+  /** The name kept for this seal's photo, or null. Throws a StoreError if unsure. */
+  getName(hash: string): Promise<NameRecord | null>;
+  /** Keeps the name unless the seal has one already. Returns whichever name is kept. */
+  putName(name: NameRecord): Promise<NameRecord>;
+  /** The names of photos at this event, at most EVENT_LIST_LIMIT of them. */
+  namesByEvent(event: string): Promise<NameRecord[]>;
+}
+
+/**
+ * The name a photo was given on chain, <label>.<event>.events.<root>, and the transaction that
+ * created it. Kept apart from the seal's record, which is never changed once written, and only
+ * once the name is there. Only a photo at an event, authorised by a person with a name, has one.
+ */
+export type NameRecord = { hash: string; event: string; name: string; tx: string; at: string };
+
+/** A photo's name as it may be kept: every field well formed, or it is not one. */
+export function keptImageName(value: unknown, hash: string): NameRecord | null {
+  const v = value as Partial<NameRecord> | null;
+  if (v?.hash !== hash || !isSealHash(hash) || !isEvent(v.event)) return null;
+  const name = keptName(v.name);
+  if (name === null || typeof v.tx !== "string" || !/^0x[0-9a-f]{64}$/.test(v.tx)) return null;
+  if (typeof v.at !== "string" || Number.isNaN(Date.parse(v.at))) return null;
+  return { hash, event: v.event, name, tx: v.tx, at: v.at };
+}
+
+/**
+ * Where a photo's name stands: there, or on its way (the photo has a picture and its person a
+ * name, but the name is not kept yet), or null when it will not get one.
+ */
+export type ImageState = { name: string; state: "done" } | { state: "pending" } | null;
+
+export function imageState(
+  kept: NameRecord | null | undefined,
+  picture: PictureRecord | null | undefined,
+  event: string | null,
+  user: string | null,
+): ImageState {
+  if (kept) return { name: kept.name, state: "done" };
+  return picture && event && user ? { state: "pending" } : null;
 }
 
 /**
@@ -106,17 +145,42 @@ export function pictureLink(picture: PictureRecord | null | undefined): PictureL
   return picture ? { ref: picture.ref, url: pictureUrl(picture.ref) } : null;
 }
 
-/** A seal of one person at an event, with its picture when one was kept. */
-export type EventPhoto = PassSeal & { picture: PictureLink | null };
+/**
+ * A seal of one person at an event, with its picture when one was kept, the person's user name
+ * when they have one, and the photo's own name.
+ */
+export type EventPhoto = PassSeal & {
+  picture: PictureLink | null;
+  name: string | null;
+  image: ImageState;
+};
 
-/** The groups of an event, each photo with its picture or null. */
+/** One person's photos at an event, under their user name when they have one. */
+export type EventPhotos = { name: string | null; photos: EventPhoto[] };
+
+/**
+ * The groups of an event, each under its person's user name or null, each photo with its
+ * picture and its own name, or null.
+ */
 export function withPictures(
+  event: string,
   groups: EventGroup[],
   pictures: PictureRecord[],
-): { photos: EventPhoto[] }[] {
+  names: NameRecord[] = [],
+): EventPhotos[] {
   const byHash = new Map(pictures.map((picture) => [picture.hash, picture]));
-  return groups.map(({ photos }) => ({
-    photos: photos.map((photo) => ({ ...photo, picture: pictureLink(byHash.get(photo.hash)) })),
+  const named = new Map(names.map((name) => [name.hash, name]));
+  return groups.map(({ name, photos }) => ({
+    name,
+    photos: photos.map((photo) => {
+      const picture = byHash.get(photo.hash);
+      return {
+        ...photo,
+        picture: pictureLink(picture),
+        name,
+        image: imageState(named.get(photo.hash), picture, event, name),
+      };
+    }),
   }));
 }
 
@@ -155,18 +219,46 @@ export function oldestFirst(seals: EventSeal[]): EventSeal[] {
     .slice(0, EVENT_LIST_LIMIT);
 }
 
-/** The seals of one person at an event. The pass is left out, as the pass list leaves it out. */
-export type EventGroup = { photos: PassSeal[] };
+/**
+ * The seals of one person at an event, with their user name or null. The pass is left out, as
+ * the pass list leaves it out.
+ */
+export type EventGroup = { name: string | null; photos: PassSeal[] };
 
-/** One group per pass, in the order each pass was first seen; each group oldest first. */
-export function byPerson(seals: EventSeal[]): EventGroup[] {
+/**
+ * One group per pass, in the order each pass was first seen; each group oldest first, under the
+ * user name `names` gives for its pass.
+ */
+export function byPerson(seals: EventSeal[], names: Map<string, string> = new Map()): EventGroup[] {
   const groups = new Map<string, PassSeal[]>();
   for (const { hash, pass, at } of oldestFirst(seals)) {
     const photos = groups.get(pass) ?? [];
     photos.push({ hash, at });
     groups.set(pass, photos);
   }
-  return [...groups.values()].map((photos) => ({ photos }));
+  return [...groups].map(([pass, photos]) => ({ name: names.get(pass) ?? null, photos }));
+}
+
+/**
+ * Everything an event's page shows: its seals, and its people in groups, each photo with its
+ * picture and names. Throws a StoreError if any of it cannot be read.
+ */
+export async function eventPhotos(event: string) {
+  const store = records();
+  const [seals, pictures, names] = await Promise.all([
+    store.byEvent(event),
+    store.picturesByEvent(event),
+    store.namesByEvent(event),
+  ]);
+  const users = await userNames(store, seals);
+  return { seals, groups: withPictures(event, byPerson(seals, users), pictures, names) };
+}
+
+/** The user name of each pass among these seals that has one. */
+export async function userNames(store: RecordStore, seals: EventSeal[]) {
+  const passes = [...new Set(seals.map((seal) => seal.pass))];
+  const users = await Promise.all(passes.map((pass) => store.userByPass(pass)));
+  return new Map(users.flatMap((user) => (user ? [[user.pass, user.name] as const] : [])));
 }
 
 /** A pass is a number, in decimal or 0x hex, short enough to be kept. */
@@ -234,7 +326,7 @@ function passKey(pass: string): string {
   return createHash("sha256").update(pass).digest("hex");
 }
 
-/** Reads `<key>.json` in `dir`. Null if there is no such file; a StoreError if it cannot be read. */
+/** Reads `<key>.json` in `dir`: null if there is none, a StoreError if it cannot be read. */
 async function readKept(dir: string, key: string): Promise<string | null> {
   if (!isKey(key)) throw new Error("not a key");
   try {
@@ -285,7 +377,42 @@ export class FileStore implements RecordStore {
     private readonly dir: string,
     private readonly pictureDir: string,
     private readonly userDir: string,
+    private readonly nameDir: string,
   ) {}
+
+  async getName(hash: string): Promise<NameRecord | null> {
+    if (!isSealHash(hash)) throw new Error("not a seal hash");
+    return keptImageName(parsed(await readKept(this.nameDir, hash)), hash);
+  }
+
+  async putName(name: NameRecord): Promise<NameRecord> {
+    const fresh = keptImageName(name, name.hash);
+    if (!fresh) throw new Error("not a name");
+    const kept = await this.getName(fresh.hash);
+    if (kept) return kept;
+    if (await writeOnce(this.nameDir, fresh.hash, JSON.stringify(fresh))) return fresh;
+    const other = await this.getName(fresh.hash);
+    if (!other) throw new StoreError();
+    return other;
+  }
+
+  async namesByEvent(event: string): Promise<NameRecord[]> {
+    let files: string[];
+    try {
+      files = await readdir(this.nameDir);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+      throw new StoreError(error);
+    }
+    const found: NameRecord[] = [];
+    for (const file of files) {
+      const hash = file.endsWith(".json") ? file.slice(0, -5) : "";
+      if (!isSealHash(hash)) continue;
+      const name = await this.getName(hash);
+      if (name?.event === event) found.push(name);
+    }
+    return found.slice(0, EVENT_LIST_LIMIT);
+  }
 
   private file(hash: string): string {
     if (!isSealHash(hash)) throw new Error("not a seal hash");
@@ -430,8 +557,8 @@ let store: RecordStore | null = null;
 
 /**
  * The store this server uses. With ARKIV_PRIVATE_KEY (or ARKIV_OWNER, to read only) the records,
- * picture pointers and users live on Arkiv; otherwise each is a file under DATA_DIR (default
- * `.data`).
+ * picture pointers, users and photo names live on Arkiv; otherwise each is a file under DATA_DIR
+ * (default `.data`).
  */
 export function records(): RecordStore {
   if (store) return store;
@@ -443,6 +570,7 @@ export function records(): RecordStore {
         path.resolve(data, "seals"),
         path.resolve(data, "pictures"),
         path.resolve(data, "users"),
+        path.resolve(data, "names"),
       );
   return store;
 }

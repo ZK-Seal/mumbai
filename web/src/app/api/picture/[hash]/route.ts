@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import { after } from "next/server";
+import { nameImage } from "@/lib/naming";
 import {
   PICTURE_MAX_BYTES,
   PICTURE_MIN_BYTES,
@@ -9,7 +11,7 @@ import {
 import { pictureUrl, uploadPicture } from "@/lib/swarm";
 import { isSealHash, pictureTokenMatches, worldConfig } from "@/lib/world";
 
-// An upload to Swarm may take most of a minute.
+// An upload to Swarm may take most of a minute, and the photo's name is created after it.
 export const maxDuration = 60;
 
 const headers = { "cache-control": "no-store" };
@@ -74,6 +76,10 @@ async function readAtMost(request: Request, limit: number): Promise<Uint8Array |
  * Only the client that just authorised the seal may upload, with the token the authorisation
  * answered with, in the `x-picture-token` header. Each seal keeps one picture, the first.
  *
+ * Once the picture is kept, a seal at an event whose person has a user name gets a name of its
+ * own on chain, image<N>.<event>.events.<root>, after the answer is sent. Posting again with the
+ * token, once the picture is kept, tries the name again if it is still missing.
+ *
  * That this picture is the photo that was sealed is the uploader's word alone: the sealed file
  * stays private on the phone, so this server cannot compare the two. What it does keep is the
  * picture's SHA-256 and size, so the picture cannot be swapped for another one later.
@@ -95,7 +101,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ has
     return refused("store", 503);
   }
   if (!record) return refused("unknown", 404);
-  if (kept) return stored(kept);
+  if (kept) {
+    // A picture whose photo has no name yet is named again, in case the first try failed.
+    await nameLater(record, kept);
+    return stored(kept);
+  }
 
   const type = (request.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
   if (type !== "image/jpeg") return refused("not-jpeg", 415);
@@ -125,5 +135,24 @@ export async function POST(request: Request, { params }: { params: Promise<{ has
   } catch {
     return refused("store", 503);
   }
+  await nameLater(record, picture);
   return stored(picture);
+}
+
+/**
+ * Names the photo on chain after the answer is sent, when the seal is at an event, its person has
+ * a user name, and the photo has no name yet. A store that cannot be read now is left for later.
+ */
+async function nameLater(record: SealRecord, picture: PictureRecord): Promise<void> {
+  if (record.event === null) return;
+  try {
+    const [user, named] = await Promise.all([
+      records().userByPass(record.pass),
+      records().getName(record.hash),
+    ]);
+    if (!user || named) return;
+  } catch {
+    return;
+  }
+  after(() => nameImage(record, picture.ref));
 }
