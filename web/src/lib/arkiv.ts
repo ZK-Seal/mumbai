@@ -6,7 +6,7 @@ import {
 } from "@arkiv-network/sdk";
 import { rabdi } from "@arkiv-network/sdk/chains";
 import { asc, desc, eq } from "@arkiv-network/sdk/query";
-import { defineSchema, str, u64 } from "@arkiv-network/sdk/schema";
+import { defineSchema, MAX_STRING_BYTES, str, u64 } from "@arkiv-network/sdk/schema";
 import {
   custom,
   getAddress,
@@ -36,24 +36,24 @@ import {
 import { isSealHash } from "@/lib/world";
 
 /**
- * One authorised seal on Arkiv. Every column is indexed, because each one is something a reader
- * looks up by: the seal, the person's pass, the account, the kind of check, the time, and the
- * person's name at a desk, and the event. The name and the event are left out when there is none,
- * as in records kept before them.
+ * One authorised seal on Arkiv. Only what a reader looks up by is indexed: the seal, the person's
+ * pass and the event; and the time, which pages of them are sorted by. The account, the kind of
+ * check and the name at a desk are only read back, so they are stored without an index. The name
+ * and the event are left out when there is none.
  */
 export const Seals = defineSchema("blank-demo.seals", {
   hash: str().indexed(),
   pass: str().indexed(),
-  account: str().indexed(),
-  credential: str().indexed(),
-  at: u64().indexed(),
-  name: str().indexed().optional(),
   event: str().indexed().optional(),
+  at: u64().indexed(),
+  account: str(),
+  credential: str(),
+  name: str().optional(),
 });
 
 /**
  * The pointer to one seal's picture on Arkiv, an entity of its own because a seal's record is
- * read-only. Looked up by the seal and by the event, and ordered by time, so those are indexed;
+ * read-only. Looked up by the seal and by the event, and sorted by time, so those are indexed;
  * the Swarm reference, the file's SHA-256 and its size are only read back. The size is kept as
  * `size`, since `bytes` is a word of the query language. The event is left out when the seal's
  * record names none.
@@ -85,6 +85,7 @@ export type ArkivSettings = {
   creator: Address;
   /** The writing wallet's key; absent on a server that only reads. */
   privateKey: Hex | null;
+  /** The RPC access key. Empty means the public endpoint, which is heavily rate limited. */
   accessKey: string;
 };
 
@@ -96,6 +97,7 @@ export type ArkivSettings = {
 export function arkivSettings(): ArkivSettings | null {
   const key = process.env.ARKIV_PRIVATE_KEY ?? "";
   const owner = process.env.ARKIV_OWNER ?? "";
+  // The one place the RPC is chosen: with a key the keyed endpoint, without one the public one.
   const accessKey = process.env.ARKIV_ACCESS_KEY ?? "";
   if (key !== "") {
     if (!/^0x[0-9a-fA-F]{64}$/.test(key)) throw new StoreError();
@@ -107,6 +109,30 @@ export function arkivSettings(): ArkivSettings | null {
     return { creator: getAddress(owner), privateKey: null, accessKey };
   }
   return null;
+}
+
+let announced = false;
+
+/** Says once, in the server log, which RPC the records go through. The key itself is not shown. */
+function announce(settings: ArkivSettings): void {
+  if (announced) return;
+  announced = true;
+  const rpc = settings.accessKey
+    ? "the keyed RPC (ARKIV_ACCESS_KEY is set)"
+    : "the public RPC without an access key, which is heavily rate limited";
+  const mode = settings.privateKey ? "writing" : "reading only";
+  console.info(`Arkiv: records on Rabdi through ${rpc}, ${mode}, as ${settings.creator}`);
+}
+
+/** Whether a value can be written as a string attribute: valid UTF-8 of at most 128 bytes. */
+function fitsStr(value: string): boolean {
+  if (Buffer.byteLength(value, "utf8") > MAX_STRING_BYTES) return false;
+  try {
+    str(value);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** What every row is read with: who created it, how, and when. */
@@ -323,6 +349,7 @@ export class ArkivStore implements RecordStore {
   private readonly pendingPictures = new Map<string, Promise<PictureRecord>>();
 
   constructor(private readonly settings: ArkivSettings) {
+    announce(settings);
     this.chain = rabdi({ accessKey: settings.accessKey });
     this.reader = createPublicClient({ chain: this.chain, transport: http(), cacheTime: 0 });
     this.writer = settings.privateKey
@@ -431,15 +458,29 @@ export class ArkivStore implements RecordStore {
   }
 
   private async write(record: SealRecord): Promise<SealRecord> {
+    const ms = Date.parse(record.at);
+    const account = record.account ?? "";
+    const name = keptName(record.name);
     const values = {
       hash: record.hash,
       pass: record.pass,
-      account: record.account ?? "",
+      account,
       credential: record.credential,
-      at: u64(Date.parse(record.at)),
-      ...(keptName(record.name) ? { name: record.name as string } : {}),
+      at: u64(ms),
+      ...(name ? { name } : {}),
       ...(isEvent(record.event) ? { event: record.event } : {}),
     };
+    // Refused rather than cut short: a hash or a pass that does not fit is not one at all.
+    const strings = [values.hash, values.pass, values.account, values.credential, name ?? ""];
+    if (
+      !isSealHash(record.hash) ||
+      !Number.isSafeInteger(ms) ||
+      ms < 0 ||
+      (account !== "" && !isAccount(account)) ||
+      !strings.every(fitsStr)
+    ) {
+      throw new Error("not a record");
+    }
     return this.keep(
       () => this.get(record.hash),
       (wallet, txParams) =>
@@ -514,10 +555,14 @@ export class ArkivStore implements RecordStore {
 
   private async writePicture(picture: PictureRecord): Promise<PictureRecord> {
     const fresh = keptPicture(picture, picture.hash);
-    if (!fresh) throw new Error("not a picture");
+    const ms = fresh ? Date.parse(fresh.at) : NaN;
+    if (!fresh || !Number.isSafeInteger(ms) || ms < 0) throw new Error("not a picture");
+    if (![fresh.hash, fresh.ref, fresh.sha256, fresh.event ?? ""].every(fitsStr)) {
+      throw new Error("not a picture");
+    }
     const values = {
       hash: fresh.hash,
-      at: u64(Date.parse(fresh.at)),
+      at: u64(ms),
       ref: fresh.ref,
       sha256: fresh.sha256,
       size: u64(fresh.bytes),

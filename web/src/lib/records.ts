@@ -156,9 +156,16 @@ export function isAccount(value: unknown): value is string {
   return typeof value === "string" && /^[0-9a-f]{16}$/.test(value);
 }
 
-/** A name kept with a record: in normal form already, or it is not kept. */
+/** The longest name kept, in UTF-8 bytes: what one string attribute on Arkiv holds. */
+export const NAME_MAX_BYTES = 128;
+
+/**
+ * A name kept with a record: in normal form already and short enough, or it is not kept. A name
+ * may be up to 255 characters, so a longer one is left out of the record rather than cut short.
+ */
 export function keptName(value: unknown): string | null {
-  return typeof value === "string" && normalName(value) === value ? value : null;
+  if (typeof value !== "string" || Buffer.byteLength(value, "utf8") > NAME_MAX_BYTES) return null;
+  return normalName(value) === value ? value : null;
 }
 
 function readRecord(text: string, hash: string): SealRecord | null {
