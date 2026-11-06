@@ -55,3 +55,79 @@ p {
   font-size: 0.875rem;
   overflow-wrap: anywhere;
 }
+
+.seal {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.5rem 1rem;
+  margin: 1.5rem 0;
+  padding: 1rem 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.seal dt {
+  color: var(--soft);
+}
+
+.seal dd {
+  margin: 0;
+  min-width: 0;
+}
+
+button {
+  font: inherit;
+  font-weight: 600;
+  min-height: 2.75rem;
+  padding: 0.6rem 1.25rem;
+  border: 1px solid var(--ink);
+  border-radius: 0.5rem;
+  background: var(--ink);
+  color: var(--ground);
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: progress;
+}
+
+button:focus-visible {
+  outline: 3px solid var(--ink);
+  outline-offset: 3px;
+}
+
+.state {
+  font-weight: 600;
+}
+
+.state.good {
+  color: var(--good);
+}
+
+.state.bad {
+  color: var(--bad);
+}
+
+.notes {
+  margin-top: 2.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+  color: var(--soft);
+  font-size: 0.875rem;
+}
+
+@media (max-width: 420px) {
+  .seal {
+    grid-template-columns: 1fr;
+    gap: 0.15rem;
+  }
+
+  .seal dd {
+    margin-bottom: 0.6rem;
+  }
+
+  button {
+    width: 100%;
+  }
+}
