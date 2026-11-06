@@ -24,6 +24,7 @@ import {
   isEvent,
   keptName,
   keptPicture,
+  keptUser,
   newestFirst,
   oldestFirst,
   StoreError,
@@ -32,6 +33,7 @@ import {
   type PictureRecord,
   type RecordStore,
   type SealRecord,
+  type UserRecord,
 } from "@/lib/records";
 import { isSealHash } from "@/lib/world";
 
@@ -67,8 +69,28 @@ export const Pictures = defineSchema("blank-demo.pictures", {
   size: u64(),
 });
 
+/**
+ * One person's name on Arkiv. Looked up by the label and by the pass, and sorted by time, so those
+ * are indexed; the full name is only read back.
+ */
+export const Users = defineSchema("blank-demo.users", {
+  label: str().indexed(),
+  pass: str().indexed(),
+  at: u64().indexed(),
+  name: str(),
+});
+
+/** The most user rows read when deciding who holds a name. */
+const USER_LIST_LIMIT = 1000;
+
 // A record outlives the event by weeks, but is not kept forever.
 export const RECORD_LIFETIME_DAYS = 30;
+
+/** Every entity is created read-only, so no one can change it later, and for a fixed time. */
+const CREATE_OPTIONS = {
+  expiration: ExpirationTime.fromDays(RECORD_LIFETIME_DAYS),
+  flags: { readonly: true, permissionlessExtension: false },
+};
 
 /** The most rows the node returns in one page. */
 const PAGE_SIZE = 100;
@@ -242,6 +264,47 @@ function toPicture(row: PictureRow): PictureRecord | null {
   );
 }
 
+type UserRow = Provenance & {
+  label: { value: string };
+  pass: { value: string };
+  at: { value: bigint };
+  name: { value: string };
+};
+
+const USER_COLUMNS = { ...PROVENANCE, label: true, pass: true, at: true, name: true } as const;
+
+function toUser(row: UserRow): UserRecord | null {
+  const ms = Number(row.at.value);
+  if (!Number.isSafeInteger(ms)) return null;
+  return keptUser({
+    label: row.label.value,
+    pass: row.pass.value,
+    name: row.name.value,
+    at: new Date(ms).toISOString(),
+  });
+}
+
+/**
+ * The users that hold, in order of creation: a row holds unless an earlier one already holds its
+ * label or its pass. So the first write wins per label and per pass, as in the file store.
+ */
+function holdingUsers(rows: UserRow[]): UserRecord[] {
+  const labels = new Set<string>();
+  const passes = new Set<string>();
+  const users: UserRecord[] = [];
+  for (const row of [...rows].sort(byCreation)) {
+    const user = toUser(row);
+    if (!user || labels.has(user.label) || passes.has(user.pass)) continue;
+    labels.add(user.label);
+    passes.add(user.pass);
+    users.push(user);
+  }
+  return users;
+}
+
+/** One page of rows as the node answers it. */
+type Page = { entities: readonly unknown[]; skipped: number };
+
 /** The first row per seal, in order of creation. */
 function firstPerSeal<T extends Provenance & { hash: { value: string } }>(rows: T[]): T[] {
   const seen = new Set<string>();
@@ -347,6 +410,7 @@ export class ArkivStore implements RecordStore {
   private readonly writer: Writer | null;
   private readonly pending = new Map<string, Promise<SealRecord>>();
   private readonly pendingPictures = new Map<string, Promise<PictureRecord>>();
+  private readonly pendingUsers = new Map<string, Promise<UserRecord>>();
 
   constructor(private readonly settings: ArkivSettings) {
     announce(settings);
@@ -369,8 +433,45 @@ export class ArkivStore implements RecordStore {
     return this.reader.select(PICTURE_COLUMNS).from(Pictures).createdBy(this.settings.creator);
   }
 
+  private users() {
+    return this.reader.select(USER_COLUMNS).from(Users).createdBy(this.settings.creator);
+  }
+
   private believed<T extends Provenance>(rows: readonly unknown[]): T[] {
     return (rows as T[]).filter((row) => trusted(row, this.settings.creator));
+  }
+
+  /**
+   * Reads page after page from `offset` 0, PAGE_SIZE at a time, up to `limit` rows, and keeps the
+   * believed rows that `keep` accepts. A StoreError if any page cannot be read.
+   */
+  private async pages<T extends Provenance>(
+    page: (offset: number) => Promise<Page>,
+    keep: (row: T) => boolean,
+    limit: number = EVENT_LIST_LIMIT,
+  ): Promise<T[]> {
+    const rows: T[] = [];
+    try {
+      for (let offset = 0; offset < limit; ) {
+        const answer = await page(offset);
+        rows.push(...this.believed<T>(answer.entities).filter(keep));
+        const covered = answer.entities.length + answer.skipped;
+        if (covered < PAGE_SIZE) break;
+        offset += covered;
+      }
+    } catch (error) {
+      throw new StoreError(error);
+    }
+    return rows;
+  }
+
+  /** Two writes of one thing on this server wait for each other rather than both writing. */
+  private once<T>(pending: Map<string, Promise<T>>, key: string, work: () => Promise<T>) {
+    const waiting = pending.get(key);
+    if (waiting) return waiting;
+    const run = work().finally(() => pending.delete(key));
+    pending.set(key, run);
+    return run;
   }
 
   private async rows(hash: string): Promise<Row[]> {
@@ -419,25 +520,16 @@ export class ArkivStore implements RecordStore {
 
   async byEvent(event: string): Promise<EventSeal[]> {
     // A page holds at most PAGE_SIZE rows, so read page after page, oldest first, to the limit.
-    const rows: Row[] = [];
-    try {
-      for (let offset = 0; offset < EVENT_LIST_LIMIT; ) {
-        const page = await this.seals()
+    const rows = await this.pages<Row>(
+      (offset) =>
+        this.seals()
           .where(eq("event", event))
           .orderBy(asc("at"))
           .limit(PAGE_SIZE)
           .offset(offset)
-          .fetch();
-        for (const row of this.believed<Row>(page.entities)) {
-          if (row.event?.value === event) rows.push(row);
-        }
-        const covered = page.entities.length + page.skipped;
-        if (covered < PAGE_SIZE) break;
-        offset += covered;
-      }
-    } catch (error) {
-      throw new StoreError(error);
-    }
+          .fetch(),
+      (row) => row.event?.value === event,
+    );
     // One seal may have several rows; the first created is the one kept, as in get().
     const seals: EventSeal[] = [];
     for (const row of firstPerSeal(rows)) {
@@ -449,12 +541,7 @@ export class ArkivStore implements RecordStore {
   }
 
   put(record: SealRecord): Promise<SealRecord> {
-    // Two requests for one seal on this server wait for each other rather than both writing.
-    const waiting = this.pending.get(record.hash);
-    if (waiting) return waiting;
-    const work = this.write(record).finally(() => this.pending.delete(record.hash));
-    this.pending.set(record.hash, work);
-    return work;
+    return this.once(this.pending, record.hash, () => this.write(record));
   }
 
   private async write(record: SealRecord): Promise<SealRecord> {
@@ -483,16 +570,7 @@ export class ArkivStore implements RecordStore {
     }
     return this.keep(
       () => this.get(record.hash),
-      (wallet, txParams) =>
-        wallet.createEntity(
-          Seals,
-          values,
-          {
-            expiration: ExpirationTime.fromDays(RECORD_LIFETIME_DAYS),
-            flags: { readonly: true, permissionlessExtension: false },
-          },
-          txParams,
-        ),
+      (wallet, txParams) => wallet.createEntity(Seals, values, CREATE_OPTIONS, txParams),
     );
   }
 
@@ -516,25 +594,16 @@ export class ArkivStore implements RecordStore {
   }
 
   async picturesByEvent(event: string): Promise<PictureRecord[]> {
-    const rows: PictureRow[] = [];
-    try {
-      for (let offset = 0; offset < EVENT_LIST_LIMIT; ) {
-        const page = await this.pictures()
+    const rows = await this.pages<PictureRow>(
+      (offset) =>
+        this.pictures()
           .where(eq("event", event))
           .orderBy(asc("at"))
           .limit(PAGE_SIZE)
           .offset(offset)
-          .fetch();
-        for (const row of this.believed<PictureRow>(page.entities)) {
-          if (row.event?.value === event) rows.push(row);
-        }
-        const covered = page.entities.length + page.skipped;
-        if (covered < PAGE_SIZE) break;
-        offset += covered;
-      }
-    } catch (error) {
-      throw new StoreError(error);
-    }
+          .fetch(),
+      (row) => row.event?.value === event,
+    );
     // One seal may have several rows; the first created is the one kept, as in getPicture().
     const pictures: PictureRecord[] = [];
     for (const row of firstPerSeal(rows)) {
@@ -545,12 +614,7 @@ export class ArkivStore implements RecordStore {
   }
 
   putPicture(picture: PictureRecord): Promise<PictureRecord> {
-    const waiting = this.pendingPictures.get(picture.hash);
-    if (waiting) return waiting;
-    const done = () => this.pendingPictures.delete(picture.hash);
-    const work = this.writePicture(picture).finally(done);
-    this.pendingPictures.set(picture.hash, work);
-    return work;
+    return this.once(this.pendingPictures, picture.hash, () => this.writePicture(picture));
   }
 
   private async writePicture(picture: PictureRecord): Promise<PictureRecord> {
@@ -570,16 +634,47 @@ export class ArkivStore implements RecordStore {
     };
     return this.keep(
       () => this.getPicture(fresh.hash),
-      (wallet, txParams) =>
-        wallet.createEntity(
-          Pictures,
-          values,
-          {
-            expiration: ExpirationTime.fromDays(RECORD_LIFETIME_DAYS),
-            flags: { readonly: true, permissionlessExtension: false },
-          },
-          txParams,
-        ),
+      (wallet, txParams) => wallet.createEntity(Pictures, values, CREATE_OPTIONS, txParams),
+    );
+  }
+
+  /** Every user that holds a name, read in full: there are few, and each depends on the others. */
+  private async holding(): Promise<UserRecord[]> {
+    const rows = await this.pages<UserRow>(
+      (offset) => this.users().orderBy(asc("at")).limit(PAGE_SIZE).offset(offset).fetch(),
+      () => true,
+      USER_LIST_LIMIT,
+    );
+    return holdingUsers(rows);
+  }
+
+  async userByLabel(label: string): Promise<UserRecord | null> {
+    return (await this.holding()).find((user) => user.label === label) ?? null;
+  }
+
+  async userByPass(pass: string): Promise<UserRecord | null> {
+    return (await this.holding()).find((user) => user.pass === pass) ?? null;
+  }
+
+  putUser(user: UserRecord): Promise<UserRecord> {
+    return this.once(this.pendingUsers, user.label, () => this.writeUser(user));
+  }
+
+  private async writeUser(user: UserRecord): Promise<UserRecord> {
+    const fresh = keptUser(user);
+    const ms = fresh ? Date.parse(fresh.at) : NaN;
+    if (!fresh || !Number.isSafeInteger(ms) || ms < 0) throw new Error("not a user");
+    if (![fresh.label, fresh.pass, fresh.name].every(fitsStr)) throw new Error("not a user");
+    const values = { label: fresh.label, pass: fresh.pass, at: u64(ms), name: fresh.name };
+    // Whatever holds the label, or else the pass, is what is kept: ours once it has landed.
+    const find = async () => {
+      const users = await this.holding();
+      return (
+        users.find((u) => u.label === fresh.label) ?? users.find((u) => u.pass === fresh.pass) ?? null
+      );
+    };
+    return this.keep(find, (wallet, txParams) =>
+      wallet.createEntity(Users, values, CREATE_OPTIONS, txParams),
     );
   }
 

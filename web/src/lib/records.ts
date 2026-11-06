@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { mkdir, readdir, readFile, link, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { ArkivStore, arkivSettings } from "@/lib/arkiv";
@@ -38,6 +38,44 @@ export interface RecordStore {
   putPicture(picture: PictureRecord): Promise<PictureRecord>;
   /** The pictures of seals authorised at this event, at most EVENT_LIST_LIMIT of them. */
   picturesByEvent(event: string): Promise<PictureRecord[]>;
+  /**
+   * Keeps the user unless the label or the pass has one already: one name per person, one person
+   * per name. Returns whichever user is kept for the label, or else for the pass.
+   */
+  putUser(user: UserRecord): Promise<UserRecord>;
+  /** The user kept under this label, or null. Throws a StoreError if unsure. */
+  userByLabel(label: string): Promise<UserRecord | null>;
+  /** The user kept for this pass, or null. Throws a StoreError if unsure. */
+  userByPass(pass: string): Promise<UserRecord | null>;
+}
+
+/**
+ * A person with a name of their own: `label` is the part they chose, `name` the full name it
+ * makes (<label>.users.<root>), and `pass` the pass of the World proof they gave for it. A name
+ * is kept only for a person who gave a proof, and a person keeps one name.
+ */
+export type UserRecord = { label: string; name: string; pass: string; at: string };
+
+/** A label someone may choose: 3 to 20 lowercase letters, digits and dashes, not one of ours. */
+export function isLabel(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    /^[a-z0-9][a-z0-9-]{2,19}$/.test(value) &&
+    !RESERVED_LABELS.has(value)
+  );
+}
+
+/** Labels that name a branch of the tree, or would look like ours. */
+export const RESERVED_LABELS = new Set(["users", "events", "www", "admin"]);
+
+/** A user as it may be kept: every field well formed, or it is not a user. */
+export function keptUser(value: unknown): UserRecord | null {
+  const v = value as Partial<UserRecord> | null;
+  if (!isLabel(v?.label) || !isPass(v.pass)) return null;
+  const name = keptName(v.name);
+  if (name === null || !name.startsWith(`${v.label}.`)) return null;
+  if (typeof v.at !== "string" || Number.isNaN(Date.parse(v.at))) return null;
+  return { label: v.label, name, pass: v.pass, at: v.at };
 }
 
 /**
@@ -186,18 +224,48 @@ function readRecord(text: string, hash: string): SealRecord | null {
   return { hash, pass, credential, account, name, event, at };
 }
 
+/** A file name a record may be kept under: a seal hash, a label, or a hash of a pass. */
+function isKey(value: string): boolean {
+  return /^[0-9a-z][0-9a-z-]{0,63}$/.test(value);
+}
+
+/** The file name a pass is kept under: its SHA-256, so any pass makes a short, safe name. */
+function passKey(pass: string): string {
+  return createHash("sha256").update(pass).digest("hex");
+}
+
+/** Reads `<key>.json` in `dir`. Null if there is no such file; a StoreError if it cannot be read. */
+async function readKept(dir: string, key: string): Promise<string | null> {
+  if (!isKey(key)) throw new Error("not a key");
+  try {
+    return await readFile(path.join(dir, `${key}.json`), "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw new StoreError(error);
+  }
+}
+
+function parsed(text: string | null): unknown {
+  if (text === null) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
 /**
- * Writes `text` as `<hash>.json` in `dir` unless that file is there already. The text goes to a
+ * Writes `text` as `<key>.json` in `dir` unless that file is there already. The text goes to a
  * temporary file that is then linked into place, which fails if the name is taken: so the first
  * write for a hash wins, and a half-written file is never seen. True if this write is the one kept.
  */
-async function writeOnce(dir: string, hash: string, text: string): Promise<boolean> {
-  if (!isSealHash(hash)) throw new Error("not a seal hash");
-  const temp = path.join(dir, `.${hash}.${randomBytes(6).toString("hex")}.tmp`);
+async function writeOnce(dir: string, key: string, text: string): Promise<boolean> {
+  if (!isKey(key)) throw new Error("not a key");
+  const temp = path.join(dir, `.${key}.${randomBytes(6).toString("hex")}.tmp`);
   try {
     await mkdir(dir, { recursive: true });
     await writeFile(temp, text, { flag: "wx" });
-    await link(temp, path.join(dir, `${hash}.json`));
+    await link(temp, path.join(dir, `${key}.json`));
     return true;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw new StoreError(error);
@@ -210,11 +278,13 @@ async function writeOnce(dir: string, hash: string, text: string): Promise<boole
 /**
  * Keeps each record as its own JSON file, named by the seal's hash, and each picture pointer the
  * same way in a directory of its own. The first record, and the first pointer, for a hash wins.
+ * Each user is a file named by its label, with a second copy named by a hash of its pass.
  */
 export class FileStore implements RecordStore {
   constructor(
     private readonly dir: string,
     private readonly pictureDir: string,
+    private readonly userDir: string,
   ) {}
 
   private file(hash: string): string {
@@ -291,6 +361,41 @@ export class FileStore implements RecordStore {
     return found.slice(0, EVENT_LIST_LIMIT);
   }
 
+  async userByLabel(label: string): Promise<UserRecord | null> {
+    if (!isLabel(label)) return null;
+    const user = keptUser(parsed(await readKept(path.join(this.userDir, "label"), label)));
+    return user?.label === label ? user : null;
+  }
+
+  async userByPass(pass: string): Promise<UserRecord | null> {
+    if (!isPass(pass)) return null;
+    const user = keptUser(parsed(await readKept(path.join(this.userDir, "pass"), passKey(pass))));
+    return user?.pass === pass ? user : null;
+  }
+
+  /**
+   * The label is claimed first, then the pass. A label claimed by a pass that turns out to have a
+   * name already is let go again, so the pass keeps the one name it had.
+   */
+  async putUser(user: UserRecord): Promise<UserRecord> {
+    const fresh = keptUser(user);
+    if (!fresh) throw new Error("not a user");
+    const kept = (await this.userByPass(fresh.pass)) ?? (await this.userByLabel(fresh.label));
+    if (kept) return kept;
+    const text = JSON.stringify(fresh);
+    const labels = path.join(this.userDir, "label");
+    if (!(await writeOnce(labels, fresh.label, text))) {
+      const other = await this.userByLabel(fresh.label);
+      if (!other) throw new StoreError();
+      return other;
+    }
+    if (await writeOnce(path.join(this.userDir, "pass"), passKey(fresh.pass), text)) return fresh;
+    await unlink(path.join(labels, `${fresh.label}.json`)).catch(() => {});
+    const other = await this.userByPass(fresh.pass);
+    if (!other) throw new StoreError();
+    return other;
+  }
+
   /** Every record kept in the directory. */
   private async all(): Promise<SealRecord[]> {
     let names: string[];
@@ -324,8 +429,9 @@ export class FileStore implements RecordStore {
 let store: RecordStore | null = null;
 
 /**
- * The store this server uses. With ARKIV_PRIVATE_KEY (or ARKIV_OWNER, to read only) the records
- * and picture pointers live on Arkiv; otherwise each is a file under DATA_DIR (default `.data`).
+ * The store this server uses. With ARKIV_PRIVATE_KEY (or ARKIV_OWNER, to read only) the records,
+ * picture pointers and users live on Arkiv; otherwise each is a file under DATA_DIR (default
+ * `.data`).
  */
 export function records(): RecordStore {
   if (store) return store;
@@ -333,6 +439,10 @@ export function records(): RecordStore {
   const data = process.env.DATA_DIR || ".data";
   store = arkiv
     ? new ArkivStore(arkiv)
-    : new FileStore(path.resolve(data, "seals"), path.resolve(data, "pictures"));
+    : new FileStore(
+        path.resolve(data, "seals"),
+        path.resolve(data, "pictures"),
+        path.resolve(data, "users"),
+      );
   return store;
 }
