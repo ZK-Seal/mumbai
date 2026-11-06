@@ -81,6 +81,12 @@ function refused(reason: string, status: number, hash: unknown) {
  * own World proof of a unique human. Without a session, or with one that does not hold, the
  * record keeps the proof's nullifier as its pass: an anonymous person of one photo, with no name.
  *
+ * A person with a name may also publish with no `result` at all, only their `session`. Their
+ * name was proven with World once, when they joined; the photo carries its zkSeal hash and is
+ * filed under that name. So the photo is tied to the World-verified person by the app's session,
+ * not by a per-photo World proof, and World is not asked again. Anonymous photos still carry
+ * their own proof. With no `result`, a session that does not hold is refused as `session`.
+ *
  * The answer that keeps a new record also carries `picture_token`, which lets this client upload
  * the seal's picture. An answer with a record kept before never carries it: anyone can reach that
  * answer by posting anything for a known hash.
@@ -99,6 +105,9 @@ export async function POST(request: Request) {
   const config = worldConfig();
   if (!config) {
     return refused("not-set-up", 503, body?.hash);
+  }
+  if (body.result === undefined || body.result === null) {
+    return bySession(config, body.hash, body.session, body.name, event);
   }
   let kept: SealRecord | null;
   try {
@@ -125,19 +134,62 @@ export async function POST(request: Request) {
     return storeFailed(body.hash);
   }
   const pass = user?.pass ?? nullifier;
+  return keep(config, body.hash, pass, user, body.name, event, "");
+}
+
+/**
+ * Files a photo under a person with a name on their session alone, with no World proof of its
+ * own: the person proved themselves with World when they joined, and the session ties this photo
+ * to them. Nothing is asked of World here.
+ */
+async function bySession(
+  config: WorldConfig,
+  hash: string,
+  given: unknown,
+  name: unknown,
+  event: string | null,
+) {
+  const pass = sessionPass(config, given);
+  let user: UserRecord | null;
+  try {
+    user = pass === null ? null : await records().userByPass(pass);
+  } catch {
+    return storeFailed(hash);
+  }
+  if (!user) return refused("session", 401, hash);
+  let kept: SealRecord | null;
+  try {
+    kept = await records().get(hash);
+  } catch {
+    return storeFailed(hash);
+  }
+  if (kept) return verified(kept);
+  return keep(config, hash, user.pass, user, name, event, " (by session)");
+}
+
+/** Keeps the record of a seal that holds, first write wins, and answers with it. */
+async function keep(
+  config: WorldConfig,
+  hash: string,
+  pass: string,
+  user: UserRecord | null,
+  given: unknown,
+  event: string | null,
+  how: string,
+) {
   let name: string | null = user?.name ?? null;
   let asked: Vouch | null = null;
-  if (typeof body.name === "string" && body.name.trim() !== "") {
+  if (typeof given === "string" && given.trim() !== "") {
     const desk = deskName();
     const answer = desk
-      ? await vouch(ethClient(), desk, body.name, pass, null)
+      ? await vouch(ethClient(), desk, given, pass, null)
       : { vouch: "not-vouched" as const, name: null };
     asked = answer.vouch;
     name = answer.name;
   }
   const at = new Date().toISOString();
   const record = await keepAfterWorld({
-    hash: body.hash,
+    hash,
     pass,
     credential: config.credential,
     account: null,
@@ -145,10 +197,10 @@ export async function POST(request: Request) {
     event,
     at,
   });
-  if (!record) return storeFailed(body.hash);
+  if (!record) return storeFailed(hash);
   // Another request may have kept a record for this seal first; then this call made nothing new.
   const created = record.pass === pass && record.at === at;
   const person = user?.label ?? "anonymous";
-  console.log(`world/verify: verified hash=${body.hash.slice(0, 8)} person=${person}`);
-  return verified(record, asked, created ? pictureToken(config, body.hash) : null);
+  console.log(`world/verify: verified hash=${hash.slice(0, 8)} person=${person}${how}`);
+  return verified(record, asked, created ? pictureToken(config, hash) : null);
 }
