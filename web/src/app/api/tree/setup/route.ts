@@ -3,7 +3,9 @@ import { adminWordMatches } from "@/lib/desk";
 import { setupTree } from "@/lib/tree-setup";
 import { treeRoot, treeSigner, TreeError, type TreeReason } from "@/lib/tree";
 
-export const maxDuration = 60;
+// Two waves of writes, each given up to 50 s. 300 s is the most a function may run on the Hobby
+// plan with fluid compute, which new projects have.
+export const maxDuration = 300;
 
 const STATUS: Record<TreeReason, number> = {
   "not-set-up": 409,

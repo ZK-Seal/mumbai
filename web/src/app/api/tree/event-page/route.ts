@@ -4,8 +4,9 @@ import { isEvent } from "@/lib/records";
 import { isSwarmRef } from "@/lib/swarm";
 import { setEventPage, treeRoot, treeSigner, TreeError, type TreeReason } from "@/lib/tree";
 
-// One wave, or two for an event that is new: up to two blocks, with time to spare.
-export const maxDuration = 60;
+// One wave, or two for an event that is new, each given up to 50 s. 300 s is the most a function
+// may run on the Hobby plan with fluid compute, which new projects have.
+export const maxDuration = 300;
 
 const STATUS: Record<TreeReason, number> = {
   "not-set-up": 409,

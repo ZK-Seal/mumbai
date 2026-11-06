@@ -11,8 +11,10 @@ import {
 import { pictureUrl, uploadPicture } from "@/lib/swarm";
 import { isSealHash, pictureTokenMatches, worldConfig } from "@/lib/world";
 
-// An upload to Swarm may take most of a minute, and the photo's name is created after it.
-export const maxDuration = 60;
+// An upload to Swarm may take most of a minute, and after the answer the person's name (if it is
+// still missing) and the photo's name are created, each given up to 50 s. 300 s is the most a
+// function may run on the Hobby plan with fluid compute, which new projects have.
+export const maxDuration = 300;
 
 const headers = { "cache-control": "no-store" };
 

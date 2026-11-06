@@ -4,8 +4,9 @@ import { isLabel, records, type UserRecord } from "@/lib/records";
 import { treeRoot, userName, userTaken } from "@/lib/tree";
 import { boundNullifier, userSignal, worldAccepts, worldConfig } from "@/lib/world";
 
-// The name is created on chain after the answer is sent, which may take most of a minute.
-export const maxDuration = 60;
+// The name is created on chain after the answer is sent, given up to 50 s. 300 s is the most a
+// function may run on the Hobby plan with fluid compute, which new projects have.
+export const maxDuration = 300;
 
 function registered(user: UserRecord, ens: "pending" | "done") {
   return Response.json({
