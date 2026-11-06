@@ -6,8 +6,10 @@ import { eventPhotos, isEvent } from "@/lib/records";
  * null), with each photo's hash, time, picture on Swarm (or null when none was kept), the person's
  * name again, and the photo's own name: `{name, state: "done"}`, `{state: "pending"}` while it is
  * being created, or null when it will not get one. The passes themselves are not given, as the
- * pass list does not give them. `people` counts the groups: a named person once, by their join
- * pass, and each photo authorised without a session as a person of its own.
+ * pass list does not give them. `people` counts the groups under a user name: a named person
+ * once, by their join pass. `unnamed` counts the photos authorised without a session; each has its
+ * own pass, so each is its own group, but they are not counted as people: one person may have
+ * taken several of them.
  */
 export async function GET(_request: Request, { params }: { params: Promise<{ event: string }> }) {
   const { event } = await params;
@@ -20,12 +22,13 @@ export async function GET(_request: Request, { params }: { params: Promise<{ eve
   } catch {
     return Response.json({ state: "unknown", reason: "store" }, { status: 503 });
   }
-  const { seals, groups } = listed;
+  const { seals, groups, people, unnamed } = listed;
   return Response.json({
     state: "listed",
     event,
     photos: seals.length,
-    people: groups.length,
+    people,
+    unnamed,
     groups,
   });
 }

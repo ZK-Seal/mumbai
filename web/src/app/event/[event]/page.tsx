@@ -53,9 +53,7 @@ async function EventPart({ params }: { params: Promise<{ event: string }> }) {
   } catch {
     return <p className="state bad">The record of seals cannot be read just now. Try again later.</p>;
   }
-  const { seals, groups } = listed;
-  // Once anyone here has a name, a person without one is shown as such, not by a number.
-  const anyNamed = groups.some((group) => group.name !== null);
+  const { seals, groups, people, unnamed } = listed;
   return (
     <>
       <dl className="seal">
@@ -68,12 +66,13 @@ async function EventPart({ params }: { params: Promise<{ event: string }> }) {
         <>
           <p className="state good" role="status">
             {count(seals.length, "sealed photo", "sealed photos")} from{" "}
-            {count(groups.length, "verified person", "verified people")}
+            {count(people, "verified person", "verified people")}
+            {unnamed > 0 && `, ${unnamed} unnamed`}
           </p>
-          {groups.map((group, i) => (
+          {groups.map((group) => (
             <section className="others" key={group.photos[0].hash}>
               <h2>
-                {group.name ?? (anyNamed ? "No name" : `Person ${i + 1}`)} —{" "}
+                {group.name ?? "No name"} —{" "}
                 {count(group.photos.length, "photo", "photos")}
               </h2>
               {group.address && (
@@ -119,8 +118,10 @@ export default function EventPage({ params }: { params: Promise<{ event: string 
     <main>
       <h1>Sealed photos at one event</h1>
       <p className="soft">
-        Each sealed photo here was authorised by a verified person. Photos authorised by the same
-        person are counted under one person, however many cameras took them.
+        Each sealed photo here was authorised by a verified person. A person with a name here is
+        counted once, however many photos they took. A photo authorised without a name stands
+        alone: it may be the same person as another, so it is counted as an unnamed photo, not as
+        a person.
       </p>
       <Suspense fallback={<p className="soft">Reading the record of seals…</p>}>
         <EventPart params={params} />

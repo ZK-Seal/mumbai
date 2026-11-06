@@ -280,7 +280,24 @@ export async function eventPhotos(event: string) {
     store.namesByEvent(event),
   ]);
   const users = await userNames(store, seals);
-  return { seals, groups: withPictures(event, byPerson(seals, users), pictures, names) };
+  const groups = withPictures(event, byPerson(seals, users), pictures, names);
+  return { seals, groups, ...headcount(groups) };
+}
+
+/**
+ * How many people an event's photos stand for. A photo authorised without a session carries its
+ * own proof's nullifier as its pass, so it cannot be told apart from another such photo of the
+ * same person: those are counted as `unnamed` photos, not as people. `people` counts the groups
+ * under a user name, each a person who joined once.
+ */
+export function headcount(groups: { name: string | null; photos: unknown[] }[]) {
+  let people = 0;
+  let unnamed = 0;
+  for (const group of groups) {
+    if (group.name !== null) people += 1;
+    else unnamed += group.photos.length;
+  }
+  return { people, unnamed };
 }
 
 /** The user name and address of each pass among these seals that has a name. */
