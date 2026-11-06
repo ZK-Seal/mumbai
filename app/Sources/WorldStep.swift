@@ -107,7 +107,7 @@ final class WorldStep {
         case .cannotStart: return .useSheet
         case .unreadable: return .notAuthorised
         }
-        let finish: Finish? = await post(base, "/api/world/verify", body(hash: hash, event: event, result: json, session: session, ticket: ticket, entry: entry), limit: 60, ticket: ticket)
+        let finish: Finish? = await post(base, "/api/world/verify", body(hash: hash, event: event, result: json, session: session, ticket: ticket, entry: entry), limit: 120, ticket: ticket)
         if finish?.reason == "no-entry" { return .noEntry }
         // This answer is trusted as it is. A second call could miss a fresh record.
         if let finish { return finish.state == "verified" ? .authorised(pictureToken: finish.token, image: Names.valid(finish.image)) : .notAuthorised }

@@ -119,7 +119,11 @@ struct NameScreen: View {
             line = Names.sentence(forRefusal: "")
             return
         }
-        if found.name != userName { userSession = "" }
+        if let session = Names.joinedSession(back) {
+            userSession = session
+        } else if found.name != userName {
+            userSession = ""
+        }
         userNameState = found.state
         userName = found.name
         label = ""

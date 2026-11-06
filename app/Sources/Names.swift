@@ -65,6 +65,14 @@ enum Names {
         return label
     }
 
+    /// The session in the join page's way back, if it has one of the right form.
+    static func joinedSession(_ back: URL?) -> String? {
+        guard let back, let parts = URLComponents(url: back, resolvingAgainstBaseURL: false), let items = parts.queryItems else { return nil }
+        let sessions = items.filter { $0.name == "session" }
+        guard sessions.count == 1, let session = sessions[0].value, isSession(session) else { return nil }
+        return session
+    }
+
     /// The ENS name of this seal's image, once the web side has one.
     static func image(base: String, hash: String) async -> ImageName? {
         struct Answer: Decodable { var image: ImageName? }
