@@ -173,7 +173,7 @@ You should see six rows, of two kinds. These are test rows. TO FILL (Armanc): th
 | `schema.md`, `friction.md`, `reach.md`, `why-arkiv.md`, `how-you-use-arkiv.md` | `/arkiv/` | There |
 | Answers "with links, numbers or a query we can run", from real rows | `/arkiv/` | **Not there**. Only test rows exist, under `test-run-a` and `test-run-b` |
 | "A public repo with an open-source license" | This repo, under MIT | There |
-| "Say how you used AI, as ETHGlobal's rules require" | "How we used AI", below, and the form | **Not there**. Serhas writes it |
+| "Say how you used AI, as ETHGlobal's rules require" | "How we used AI", below, and the form | There |
 
 ## Swarm
 
@@ -255,7 +255,7 @@ Prize: [Cont] Best Use of IDKit.
 
 ## How we used AI
 
-TO FILL (Serhas): he writes this section.
+We built this together with AI tools. We designed the system, chose its security rules and limits, worked on the code with them, directed the work, and tested the flow on real phones. AI tools helped write the phone app, gallery page, contracts, server and docs.
 
 ## What is true in this demo
 
