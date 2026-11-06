@@ -1,20 +1,39 @@
+/* The iPhone app's colours (app/Sources/Theme.swift), light and dark. */
 :root {
-  --ground: #f6f5f1;
-  --ink: #15171c;
-  --soft: #5b5f68;
-  --line: #d9d7d0;
+  --ground: #f8f7f3;
+  --surface: #ffffff;
+  --ink: #111318;
+  --soft: #63656d;
+  --line: #d3d1ca;
+  --accent: #8a5a1a;
+  --on-accent: #ffffff;
+  --accent-wash: rgba(138, 90, 26, 0.12);
   --good: #1f6b3a;
-  --bad: #a8261f;
+  --good-wash: #e5f1e8;
+  --bad: #9a2a1f;
+  --bad-wash: #fbe8e5;
+  --waiting: #b86b1d;
+  --waiting-wash: #fbefdf;
+  --radius: 12px;
+  color-scheme: light dark;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --ground: #0f1420;
-    --ink: #eceae4;
-    --soft: #a3a7b0;
-    --line: #2a3142;
-    --good: #6fcf8e;
-    --bad: #f0857d;
+    --ground: #0e1626;
+    --surface: #152036;
+    --ink: #f3f2ee;
+    --soft: #939bad;
+    --line: #283349;
+    --accent: #dcab64;
+    --on-accent: #0e1626;
+    --accent-wash: rgba(220, 171, 100, 0.16);
+    --good: #7fd69a;
+    --good-wash: #13281c;
+    --bad: #ff9f92;
+    --bad-wash: #301614;
+    --waiting: #f2b46b;
+    --waiting-wash: #33261a;
   }
 }
 
@@ -22,11 +41,20 @@
   box-sizing: border-box;
 }
 
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
 body {
   margin: 0;
   background: var(--ground);
   color: var(--ink);
-  font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+  font: 16px/1.5 var(--font-sans), system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--accent);
 }
 
 main {
