@@ -338,10 +338,11 @@ const ROOT_NAME = 'zk-seal.eth';
 // Opened through an ENS name, by any gateway, the page names the root it was opened under.
 const rootInHost = /(?:^|\.)([a-z0-9-]+\.eth)(?:\.|$)/.exec(window.location.hostname);
 const ROOT_SHOWN = rootInHost ? rootInHost[1] : ROOT_NAME;
-// The names in the tree, in this order. A name shows as real only if Arkiv has a record for it. Otherwise it says "not yet".
+// The first names in the tree, in this order. A name shows as real only if Arkiv has a record for it. Otherwise it says "not yet".
+// These are a start, not the only source: any other name found in a real row is listed after them.
 const USERS = ['armanc', 'abena', 'serhas'];
 const EVENTS = ['devcon', 'devconnect', 'ethglobal'];
-// Trial rows use names that start like this. They stay out of the people's list. An event not on the list shows only if the link or the name names it.
+// Trial rows use names that start like this. They stay out of both lists. A trial event shows only if the link or the name names it.
 const TRIAL_EVENT = 'test-';
 // How often the tree reads Arkiv again, and how long it waits after a refusal or an error. No error is shown for these.
 const READ_EVERY_MS = 20000;
@@ -622,13 +623,20 @@ function toModel(records, pointers, imageNames, users) {
   const events = new Map();
   for (const record of firstOfEach(records, (row) => row.hash).values()) {
     if (!people.has(record.pass) && record.userName) {
-      people.set(record.pass, {
+      const person = {
         pass: record.pass,
         label: record.userName.split('.')[0],
         name: record.userName,
         address: null,
         owner: ownerOf(null, record.pass),
-      });
+      };
+      people.set(record.pass, person);
+      // A name seen only on a photo is listed too, unless it or its event is a trial.
+      if (LABEL.test(person.label) && !heldLabels.has(person.label)
+        && !person.label.startsWith(TRIAL_EVENT) && !record.event.startsWith(TRIAL_EVENT)) {
+        heldLabels.add(person.label);
+        named.push(person);
+      }
     }
     const imageName = ofRecord(imageNameOf, record);
     const photo = {
@@ -1019,8 +1027,8 @@ function draw(linked) {
     rowsOf(rows.names, readImageName),
     rowsOf(rows.users, readUser),
   );
-  // Only the listed events show, and the one the link or the name asks for.
-  const events = new Map([...model.events].filter(([slug]) => EVENTS.includes(slug) || slug === linked));
+  // The listed events, and any other event found in a real row. A trial shows only if the link or the name asks for it.
+  const events = new Map([...model.events].filter(([slug]) => !slug.startsWith(TRIAL_EVENT) || slug === linked));
   latest = { events, complete: rows.records.complete };
   namesOf = new Map();
   for (const person of model.named) addName(person.owner, person.label);
