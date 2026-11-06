@@ -27,6 +27,8 @@ struct ResultScreen: View {
     let height: Int
     let onDone: () -> Void
 
+    @AppStorage("webAddress") private var webAddress = ""
+    @Environment(\.openURL) private var openURL
     @State private var picture: UIImage?
     @State private var problem = false
 
@@ -42,6 +44,12 @@ struct ResultScreen: View {
                     Text("The picture could not be shown.")
                 } else {
                     ProgressView()
+                        .frame(maxWidth: .infinity)
+                }
+                if picture != nil, let link = AuthoriseLink.url(base: AuthoriseLink.base(fromSettings: webAddress), hash: result.hash,
+                                                                edit: "blank", width: width, height: height) {
+                    Button("Authorise this seal") { openURL(link) }
+                        .buttonStyle(.bordered)
                         .frame(maxWidth: .infinity)
                 }
                 Button("Start over") { onDone() }
@@ -61,6 +69,15 @@ struct ResultScreen: View {
             problem = true
             return
         }
-        picture = image
+        // Drawn away from the screen's own thread, so a large picture does not stop the screen.
+        let (areas, size) = (boxes, cell)
+        let shown = await Task.detached(priority: .userInitiated) {
+            AreaPreview.mosaic(image, boxes: areas, cell: size)
+        }.value
+        if let shown {
+            picture = shown
+        } else {
+            problem = true
+        }
     }
 }

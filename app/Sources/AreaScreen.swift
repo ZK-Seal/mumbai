@@ -5,6 +5,7 @@ import SwiftUI
 struct AreaScreen: View {
     @AppStorage("serviceAddress") private var serviceAddress = ""
     @AppStorage("accessWord") private var accessWord = ""
+    @AppStorage("webAddress") private var webAddress = ""
 
     /// The grid the shape snaps to, in photo pixels.
     private static let cell = 16
@@ -25,6 +26,8 @@ struct AreaScreen: View {
     /// True while a finger is down. It goes false by itself even when the system cuts a touch off.
     @GestureState private var touching = false
     @State private var shape: PenShape?
+    @State private var preview: UIImage?
+    @State private var previewTask: Task<Void, Never>?
     @State private var running = false
     @State private var progress: String?
     @State private var finished: FinishedJob?
@@ -43,6 +46,13 @@ struct AreaScreen: View {
     }
 
     private var serviceURL: URL? { ServiceClient.address(fromSettings: serviceAddress) }
+
+    /// What stops a send before it starts, in plain words.
+    private var missing: String? {
+        if serviceURL == nil { return "No service address. Add it in Settings." }
+        if ServiceClient.accessWord(fromSettings: accessWord).isEmpty { return "No access word. Add it in Settings." }
+        return nil
+    }
 
     /// A photo that could not be read. Nothing shows when nothing went wrong.
     private var boxLine: String? { photo == nil ? problem : nil }
@@ -71,6 +81,7 @@ struct AreaScreen: View {
         }
         .padding(16)
         .task(id: pick) { await load() }
+        .onAppear { keepLaunchSettings() }
         .onChange(of: touching) {
             // A touch that is cut off gets no end call, and the next line must not join this one.
             if !touching { endLine() }
@@ -98,6 +109,11 @@ struct AreaScreen: View {
 
     private var sendArea: some View {
         VStack(spacing: 8) {
+            if let missing {
+                Text(missing)
+                    .font(.footnote)
+                    .accessibilityIdentifier("missing")
+            }
             HStack {
                 if running {
                     Button("Stop waiting") { jobTask?.cancel() }
@@ -108,7 +124,7 @@ struct AreaScreen: View {
                 Spacer()
                 Button("Blank this area") { startJob() }
                     .buttonStyle(.borderedProminent)
-                    .disabled(shape == nil || running || serviceURL == nil)
+                    .disabled(shape == nil || running || missing != nil)
             }
             if let progress {
                 Text(progress)
@@ -131,15 +147,21 @@ struct AreaScreen: View {
                     .textFieldStyle(.roundedBorder)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
+                TextField("Web address", text: $webAddress)
+                    .textFieldStyle(.roundedBorder)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .keyboardType(.URL)
             }
             .padding(.top, 8)
             .disabled(running)
         }
     }
 
-    /// The photo, the area that takes the finger, and the finger's line on top.
+    /// The photo with the tiles, the area that takes the finger, and the finger's line on top.
+    /// The line shows only while the finger is down.
     private func canvas(_ photo: PreparedPhoto) -> some View {
-        Image(uiImage: photo.image)
+        Image(uiImage: preview ?? photo.image)
             .resizable()
             .scaledToFit()
             .accessibilityIdentifier("photo")
@@ -160,14 +182,28 @@ struct AreaScreen: View {
                                     stroke.append(CGPoint(x: drag.location.x / scale, y: drag.location.y / scale))
                                 }
                                 .onEnded { _ in endLine() })
-                        if !stroke.isEmpty {
+                        if drawing {
                             Path { $0.addLines(stroke.map { CGPoint(x: $0.x * scale, y: $0.y * scale) }) }
                                 .stroke(.yellow, lineWidth: 2)
+                                .allowsHitTesting(false)
+                        }
+                        if previewTask != nil {
+                            ProgressView()
+                                .accessibilityIdentifier("drawing")
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
                                 .allowsHitTesting(false)
                         }
                     }
                 }
             }
+    }
+
+    /// An address and word given at launch stay in the settings, so a restart does not lose them.
+    private func keepLaunchSettings() {
+        let given = ProcessInfo.processInfo.environment
+        if let address = given["SERVICE_URL"], !address.isEmpty { serviceAddress = address }
+        if let word = given["SERVICE_WORD"], !word.isEmpty { accessWord = word }
+        if let web = given["WEB_URL"], !web.isEmpty { webAddress = web }
     }
 
     private func endLine() {
@@ -186,16 +222,33 @@ struct AreaScreen: View {
         problem = nil
     }
 
-    /// The finger has lifted: its line closes and its cells are worked out.
+    /// The finger has lifted: its line closes and its cells are worked out. The preview is drawn away
+    /// from the screen's own thread, so a large photo does not stop the screen. A newer shape replaces it.
     private func finishShape() {
+        previewTask?.cancel()
+        previewTask = nil
+        preview = nil
         guard let photo, !stroke.isEmpty else { return }
         shape = PenShape.make(path: stroke, photoWidth: photo.width, photoHeight: photo.height, cell: Self.cell)
+        guard let boxes = shape?.boxes else { return }
+        let (image, cell) = (photo.image, Self.cell)
+        previewTask = Task.detached(priority: .userInitiated) {
+            let drawn = AreaPreview.mosaic(image, boxes: boxes, cell: cell)
+            await MainActor.run {
+                guard !Task.isCancelled else { return }
+                preview = drawn
+                previewTask = nil
+            }
+        }
     }
 
     private func clearShape() {
+        previewTask?.cancel()
+        previewTask = nil
         stroke = []
         drawing = false
         shape = nil
+        preview = nil
         progress = nil
     }
 
@@ -263,6 +316,8 @@ struct AreaScreen: View {
                 switch job.state {
                 case "queued", "running":
                     progress = "Working: \(Int(seconds)) s"
+                case "waiting":
+                    progress = "Waiting for free memory on the server."
                 case "done":
                     guard let result = JobResult(job: job, boxes: boxes, width: photo.width, height: photo.height) else {
                         return "The answer does not match what was sent, so no result is shown."
