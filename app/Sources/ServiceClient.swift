@@ -39,7 +39,6 @@ struct ServiceClient {
         ProcessInfo.processInfo.environment["SERVICE_WORD"] ?? text
     }
 
-    /// Sends the photo and the boxes, for the one edit this app asks for. Returns the job's id.
     func seal(jpeg: Data, boxes: [GridBox]) async throws -> String {
         var request = URLRequest(url: base.appendingPathComponent("seal"))
         request.httpMethod = "POST"

@@ -12,8 +12,13 @@ The app's screens do not explain any of this, so the facts are here.
 2. You draw a closed shape with a finger. A thin line follows the finger. When the finger lifts, the line goes away and the shape grows out to a 16 px grid, so the grid cells cover all of it.
 3. The app draws mosaic tiles over the area.
 4. "Blank this area" sends the photo and the area to the backend, which is a private dependency and is not in this repo. So the photo goes off the phone to our own server.
-5. The answer is a plain copy of the sealed picture, a hash and a verdict. The picture appears only after the check passed and the whole answer matches what the app sent. Any other answer shows one fixed line and no picture. The screen shows no other sign of a pass. The sealed file cannot be downloaded. The backend removes it and the photo after it answers.
+5. The answer is a plain copy of the sealed picture, a hash and a verdict. The picture appears only after the check passed and the whole answer matches what the app sent. Any other answer shows one fixed line and no picture. The screen shows no line saying it passed. The sealed file cannot be downloaded. The backend removes it and the photo after the picture is fetched, or after 600 s if it is never fetched. A service stop in that window can leave them until the next start.
 6. After a result, "Start over" also takes the photo off the screen.
+
+## The button
+
+"Authorise this seal" shows with the picture, only if a web address is set. It opens that page in the browser. The address comes from Settings or from `WEB_URL` at launch, and it is not in this repo.
+It sends the hash, the edit and the size to that page, in the link. It sends no photo.
 
 ## The tiles on the screen
 
@@ -49,4 +54,4 @@ Public Sans, under the SIL Open Font License. The licence is beside it in `app/F
 - **It is not a privacy guarantee.** The file still carries a map of the area, which can show outlines, even writing on plain paper, and the original's hash.
 - **It does not show that a camera took the photo.** In this demo our test key signs the photo after the app sends it. That key is not on any trust list.
 - **It does not cover the look on the screen.** The mosaic is drawn by the app.
-- **You cannot check it yourself.** The check is our server's word. The backend checks the proof, and the app shows the picture only if the check passed. The phone cannot recompute the hash, because it never holds the sealed file. After the answer no one holds it, so the hash can no longer be checked against the file.
+- **You cannot check it yourself.** The check is our server's word. The backend checks the proof, and the app shows the picture only if the check passed. The phone cannot recompute the hash, because it never holds the sealed file. The backend removes that file after the picture is fetched, or after 600 s if it is never fetched, and a service stop in that window can leave it until the next start. Once it is removed no one holds it, so the hash can no longer be checked against the file.

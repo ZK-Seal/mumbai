@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// An answer the app accepts. It exists only if the check passed and the answer is exactly what was asked for.
-/// The result screen opens only with one, so the picture showing up is the only sign of a pass.
+/// The result screen opens only with one, so nothing on it shows before a pass.
 struct JobResult {
     let hash: String
 
@@ -11,7 +11,7 @@ struct JobResult {
               job.width == width, job.height == height,
               let hash = job.sha256, hash.count == 64, hash.allSatisfy({ "0123456789abcdef".contains($0) }),
               job.seal_signer == "not-on-a-trust-list",
-              ["demo-certificate", "trust-list", "other-signer"].contains(job.origin) else { return nil }
+              job.origin == "demo-certificate" else { return nil }
         self.hash = hash
     }
 }
@@ -52,18 +52,18 @@ struct ResultScreen: View {
                 if picture != nil, let link = AuthoriseLink.url(base: AuthoriseLink.base(fromSettings: webAddress), hash: result.hash,
                                                                 edit: "blank", width: width, height: height) {
                     Button { openURL(link) } label: {
-                        Text("Authorise this seal")
-                            .font(Theme.text(15, .medium))
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 4)
+                        Theme.mainLabel(Text("Authorise this seal"))
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.borderedProminent)
                     .controlSize(.large)
                 }
                 Button { onDone() } label: {
-                    Theme.mainLabel(Text("Start over"))
+                    Text("Start over")
+                        .font(Theme.text(15, .medium))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 4)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.bordered)
                 .controlSize(.large)
             }
             .padding(16)

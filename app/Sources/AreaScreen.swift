@@ -396,7 +396,7 @@ struct AreaScreen: View {
                 case "queued", "running":
                     progress = "Working: \(Int(seconds)) s"
                 case "waiting":
-                    progress = "Waiting for free memory on the server."
+                    progress = "Waiting for the server."
                 case "done":
                     guard let result = JobResult(job: job, boxes: boxes, width: photo.width, height: photo.height) else {
                         return "The answer does not match what was sent, so no result is shown."
