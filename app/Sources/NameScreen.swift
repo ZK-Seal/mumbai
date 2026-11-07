@@ -129,7 +129,12 @@ struct NameScreen: View {
 
     /// Asks until the name is finished. It takes a while on the chain, so this goes on only while the screen is open.
     private func watchName() async {
-        guard userNameState == "pending", let label = Names.savedLabel(userLabel, name: userName) else { return }
+        guard let label = Names.savedLabel(userLabel, name: userName) else { return }
+        if let found = await Names.listing(base: AuthoriseLink.base(fromSettings: webAddress), label: label), found.name != userName {
+            userName = found.name
+            return
+        }
+        guard userNameState == "pending" else { return }
         if let state = await Names.waitForName(base: AuthoriseLink.base(fromSettings: webAddress), label: label) {
             userNameState = state
         }

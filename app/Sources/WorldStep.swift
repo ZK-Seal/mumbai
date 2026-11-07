@@ -7,7 +7,7 @@ import UIKit
 final class WorldStep {
     enum Outcome {
         /// The token comes only with the answer that made the record, and it lets the app send the picture once it has one.
-        case authorised(pictureToken: String?, image: ImageName?)
+        case authorised(pictureToken: String?, image: ImageName?, name: String? = nil)
         case notAuthorised
         /// World's own error word, from its fixed list.
         case worldFailed(String)
@@ -65,16 +65,18 @@ final class WorldStep {
         var state: String
         var picture_token: String?
         var image: ImageName?
+        var name: String?
         var reason: String?
         var text: String?
 
         /// Only the state is needed. An extra field in another form must not undo "verified".
         init(from decoder: Decoder) throws {
-            enum Keys: String, CodingKey { case state, picture_token, image, reason, text }
+            enum Keys: String, CodingKey { case state, picture_token, image, name, reason, text }
             let box = try decoder.container(keyedBy: Keys.self)
             state = try box.decode(String.self, forKey: .state)
             picture_token = try? box.decodeIfPresent(String.self, forKey: .picture_token)
             image = try? box.decodeIfPresent(ImageName.self, forKey: .image)
+            name = (try? box.decodeIfPresent(String.self, forKey: .name)).flatMap { $0.flatMap { Names.isName($0) ? $0 : nil } }
             reason = try? box.decodeIfPresent(String.self, forKey: .reason)
             text = try? box.decodeIfPresent(String.self, forKey: .text)
         }
@@ -128,7 +130,7 @@ final class WorldStep {
         if finish?.reason == "session" { return .sessionRefused(text: Self.words(finish?.text)) }
         // This answer is trusted as it is. A second call could miss a fresh record.
         if let finish {
-            if finish.state == "verified" { return .authorised(pictureToken: finish.token, image: Names.valid(finish.image)) }
+            if finish.state == "verified" { return .authorised(pictureToken: finish.token, image: Names.valid(finish.image), name: finish.name) }
             return Self.words(finish.text).map { .refused(text: $0) } ?? .notAuthorised
         }
         // With no answer at all, the record may still have been kept.

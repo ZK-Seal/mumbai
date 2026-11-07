@@ -232,8 +232,10 @@ struct ResultScreen: View {
         Task {
             switch await world.run(base: base, hash: result.hash, event: AuthoriseLink.event(fromSettings: event),
                                      session: Names.isSession(userSession) ? userSession : nil, ticket: result.ticket, entry: entryNow) {
-            case .authorised(let token, let image):
+            case .authorised(let token, let image, let name):
                 authorising = .authorised
+                // The web side's name for this person is the one to show, not the one saved earlier.
+                if let name, name != userName { userName = name; userLabel = Names.label(of: name) ?? userLabel }
                 imageName = image
                 pictureToken = token
                 sendPicture()
@@ -304,7 +306,12 @@ struct ResultScreen: View {
 
     /// The web side finishes a waiting name when it is asked, so this asks while the screen is open.
     private func watchUserName() async {
-        guard userNameState == "pending", let label = Names.savedLabel(userLabel, name: userName) else { return }
+        guard let label = Names.savedLabel(userLabel, name: userName) else { return }
+        if let found = await Names.listing(base: AuthoriseLink.base(fromSettings: webAddress), label: label), found.name != userName {
+            userName = found.name
+            return
+        }
+        guard userNameState == "pending" else { return }
         if let state = await Names.waitForName(base: AuthoriseLink.base(fromSettings: webAddress), label: label) {
             userNameState = state
         }
