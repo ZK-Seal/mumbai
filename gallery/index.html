@@ -35,12 +35,18 @@
     --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     /* The words on the app's main button, Theme.onAccent. */
     --on-accent: #ffffff;
+    --chain: #1d6f5c;
+    --chain-soft: #e3f1ec;
+    --guide: #cdbb98;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --accent: #dcab64;
       --accent-soft: #2a2416;
       --on-accent: #0e1626;
+      --chain: #8fd3bd;
+      --chain-soft: #15302f;
+      --guide: #5c5038;
       --bg: #0e1626;
       --surface: #152036;
       --ink: #edf0f6;
@@ -149,7 +155,7 @@
     border-left: 1px solid var(--accent);
   }
   .split {
-    --gap: 16px;
+    --gap: 36px;
     position: relative;
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -167,65 +173,102 @@
     border-bottom: 0;
     border-radius: 12px 12px 0 0;
   }
+  @media (max-width: 480px) {
+    .split { --gap: 20px; }
+    .limb .entry { gap: 6px; padding: 12px 2px; }
+    .limb .entry-name { font-size: 14px; }
+  }
   .limb { position: relative; display: flex; flex-direction: column; min-width: 0; }
-  .caption { order: 2; margin: 10px 0 0; color: var(--muted); font-size: 12px; text-align: center; }
   .branch {
     display: flex;
     flex-direction: column;
-    gap: 10px;
     margin: 0;
     padding: 10px 0 0;
     list-style: none;
   }
-  .branch > li { position: relative; }
-  .branch > li::before {
+  .branch > li { position: relative; border-bottom: 1px solid var(--guide); }
+  .branch > li:first-child { border-top: 1px solid var(--guide); }
+  .branch > li:first-child::before {
     content: '';
     position: absolute;
     left: 50%;
-    top: -10px;
+    top: -11px;
     height: 10px;
     border-left: 1px solid var(--accent);
   }
   .entry {
-    display: block;
+    display: flex;
+    align-items: center;
+    gap: 8px;
     width: 100%;
-    min-height: 62px;
-    padding: 11px 8px;
-    border: 1px solid var(--line);
-    border-radius: 14px;
-    background: var(--surface);
-    text-align: center;
+    min-height: 50px;
+    padding: 12px 4px;
+    border: 0;
+    background: none;
+    text-align: left;
     overflow-wrap: anywhere;
-    transition: opacity 0.15s, background-color 0.15s, border-color 0.15s, color 0.15s;
+    transition: opacity 0.15s, background-color 0.15s, color 0.15s;
   }
-  .entry { border-color: var(--accent); }
   button.entry:hover { background: var(--accent-soft); }
-  .entry-name { display: block; font-size: 15px; font-weight: 500; line-height: 1.3; }
-  .entry-sub { display: block; margin-top: 3px; color: var(--muted); font-size: 12px; line-height: 1.35; }
-  .entry-sub.code { font-family: var(--mono); }
-  .entry.absent { background: none; }
-  .entry.absent .entry-name { color: var(--muted); font-weight: 400; }
-  .entry[aria-current="true"] .entry-name { color: var(--accent); }
-  .entry.lit { border-color: var(--accent); }
-
-  /* One event's images, on the same centre line. */
-  #images { margin-top: 32px; }
-  #images .branch > li {
-    padding: 2px 8px;
-    border: 1px solid var(--accent);
-    border-radius: 14px;
-    background: var(--surface);
+  .chevron { flex: none; width: 10px; height: 10px; }
+  button.entry .chevron::before {
+    content: '';
+    display: block;
+    width: 6px;
+    height: 6px;
+    margin: 1px 0 0 1px;
+    border-right: 1.5px solid var(--muted);
+    border-bottom: 1.5px solid var(--muted);
+    transform: rotate(-45deg);
+    transition: transform 0.26s ease;
   }
-  .row { display: flex; flex-wrap: wrap; align-items: center; gap: 0 8px; min-height: 48px; }
-  .chain { color: var(--accent); font-size: 14px; font-weight: 600; }
-  .legend { margin: 14px 0 0; color: var(--muted); font-size: 12px; line-height: 1.45; text-align: center; }
+  button.entry[aria-expanded="true"] .chevron::before { border-color: var(--accent); transform: translate(1px, -1px) rotate(45deg); }
+  .entry-icon { flex: none; width: 16px; height: 16px; color: var(--accent); }
+  .entry-icon path { fill: none; stroke: currentColor; stroke-width: 1.25; stroke-linejoin: round; }
+  button.entry[aria-expanded="true"] .entry-icon path { fill: var(--accent-soft); }
+  .entry-name { flex: 1; min-width: 0; font-size: 15px; font-weight: 500; line-height: 1.3; }
+  .entry-count { flex: none; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .entry.absent .entry-name { color: var(--muted); font-weight: 400; }
+  .entry.absent .entry-icon { color: var(--muted); }
+  button.entry[aria-expanded="true"] .entry-name { color: var(--accent); }
+  .entry.lit { background: var(--accent-soft); }
+
+  /* What a name holds, indented, along one fine line. */
+  .folder { margin: 0 0 8px 9px; padding: 2px 0 8px 12px; border-left: 1px solid var(--guide); }
+  .folder-info { margin: 0 0 10px; color: var(--muted); font-size: 12px; line-height: 1.4; overflow-wrap: anywhere; }
+  /* Opens smoothly, and what is closed cannot be reached with the keyboard. */
+  .reveal { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.26s ease; }
+  .reveal > * { min-height: 0; overflow: hidden; visibility: hidden; transition: visibility 0s linear 0.26s; }
+  .reveal.open { grid-template-rows: 1fr; }
+  .reveal.open > * { visibility: visible; transition-delay: 0s; }
+  /* Every small photo is 120 px square, cropped to fit, with its name and badge below. */
+  .thumbs { display: grid; grid-template-columns: repeat(auto-fill, 120px); gap: 14px 10px; margin: 0; padding: 0; list-style: none; }
+  .thumb { display: flex; flex-direction: column; align-items: center; gap: 5px; width: 120px; padding: 0; border: 0; border-radius: 10px; background: none; transition: opacity 0.15s; }
+  .thumb .frame { width: 120px; height: 120px; min-height: 0; padding: 6px; border-radius: 10px; overflow: hidden; }
+  .thumb .frame.shown { display: block; padding: 0; }
+  .thumb .frame img { width: 120px; height: 120px; object-fit: cover; }
+  .thumb:hover .frame { outline: 1px solid var(--accent); outline-offset: 1px; }
+  .thumb .note { font-size: 10px; line-height: 1.25; overflow-wrap: anywhere; }
+  .thumb-name { font-size: 13px; font-weight: 500; line-height: 1.25; text-align: center; overflow-wrap: anywhere; }
+  .chain {
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: var(--chain-soft);
+    color: var(--chain);
+    font-size: 10.5px;
+    font-weight: 500;
+    line-height: 1.5;
+    white-space: nowrap;
+  }
+  .legend { margin: 12px 0 0; color: var(--muted); font-size: 11.5px; line-height: 1.45; overflow-wrap: anywhere; }
+  .legend-mark { color: var(--chain); font-weight: 600; }
   .seal-watch { margin: 0 0 24px; padding: 14px; border: 1px solid var(--accent); border-radius: 14px; background: var(--surface); text-align: center; scroll-margin-top: 16px; }
   .seal-steps { margin: 12px 0; padding: 0; list-style: none; color: var(--muted); font-size: 14px; overflow-wrap: anywhere; }
   .seal-steps li { padding: 3px 0; }
   .seal-steps li.done { color: var(--ink); }
   .seal-steps li.done::before { content: '✓ '; color: var(--accent); }
-  .seal-watch .frame { overflow: hidden; border-radius: 10px; }
-  #images .branch > li.seal-focus { background: var(--accent-soft); }
+  .seal-watch .thumb { margin: 0 auto; }
+  .thumbs > li.seal-focus .frame { outline: 2px solid var(--accent); outline-offset: 2px; }
   .name, .to {
     min-width: 0;
     min-height: 44px;
@@ -240,13 +283,16 @@
   .name { font-size: 16px; font-weight: 500; }
   .to { margin-left: auto; color: var(--muted); font: 400 13px/1.3 var(--mono); }
   .none { color: var(--muted); font-weight: 400; }
-  .lighting .entry:not(.lit), .lighting .name:not(.lit), .lighting .to:not(.lit) { opacity: 0.45; }
+  .lighting .entry:not(.lit), .lighting .name:not(.lit), .lighting .thumb:not(.lit) { opacity: 0.45; }
   .lit { color: var(--accent); background: var(--accent-soft); }
-  .lit .entry-name, .lit .entry-sub { color: var(--accent); }
+  .lit .entry-name { color: var(--accent); }
   .to.unnamed { display: flex; align-items: center; }
   .fresh { animation: arrive 0.6s ease-out; }
   @keyframes arrive { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
-  @media (prefers-reduced-motion: reduce) { .fresh { animation: none; } }
+  @media (prefers-reduced-motion: reduce) {
+    .fresh { animation: none; }
+    .reveal, .reveal > *, button.entry .chevron::before, .entry, .thumb { transition: none; }
+  }
 
   /* Many names, one address. */
   #many {
@@ -285,13 +331,25 @@
     font-size: 18px;
   }
 
-  /* One image, opened in place. */
-  .panel {
-    margin: 2px -8px -2px;
-    overflow: hidden;
-    border-top: 1px solid var(--line);
-    border-radius: 0 0 14px 14px;
+  /* One photo, larger, in the middle of the window: at most 480 px wide and 70% of its height, with its details below. */
+  .viewer {
+    width: min(480px, calc(100vw - 32px));
+    max-height: 70vh;
+    max-height: 70dvh;
+    margin: auto;
+    padding: 0;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--surface);
+    color: var(--ink);
+    overflow: auto;
   }
+  .viewer:focus { outline: none; }
+  .viewer::backdrop { background: rgba(8, 12, 22, 0.6); }
+  .viewer .frame { min-height: 160px; }
+  .viewer .frame.shown { min-height: 0; background: var(--bg); }
+  .viewer .frame img { max-height: 46vh; max-height: 46dvh; object-fit: contain; }
+  .viewer .close { z-index: 1; border-radius: 0 0 0 12px; background: var(--surface); }
   .frame {
     display: flex;
     align-items: center;
@@ -337,7 +395,7 @@
   <noscript><p class="state bad">This page reads its records with JavaScript.</p></noscript>
   <div id="tree"></div>
   <section id="images" hidden></section>
-  <p id="legend" class="legend" hidden>✓ A real ENS name under zk-seal.eth. Our server made it after a World check of this photo. The seal is a proven edit of a signed original (our test key in this demo); the server takes its hash from the app.</p>
+  <p id="legend" class="legend" hidden><span class="legend-mark">✓</span> A real ENS name under zk-seal.eth. Our server made it after a World check of this photo. The seal is a proven edit of a signed original (our test key in this demo); the server takes its hash from the app.</p>
   <div id="many" role="status" hidden></div>
 </main>
 <script>
@@ -391,7 +449,13 @@ const ui = {
   images: document.getElementById('images'),
   legend: document.getElementById('legend'),
   many: document.getElementById('many'),
+  folder: make('div', 'folder'),
+  folderInfo: make('p', 'folder-info'),
+  viewer: document.body.appendChild(make('dialog', 'viewer')),
 };
+ui.viewer.tabIndex = -1;
+ui.images.classList.add('reveal');
+ui.images.append(ui.folder);
 
 // All row text is untrusted. It reaches the page only through textContent, alt and validated hex.
 function make(tag, className, text) {
@@ -783,19 +847,12 @@ function paintMany() {
 
 // Tapping a person or an address shows every name of theirs, and tapping again clears it.
 function light(person) {
+  if (ui.viewer.open) ui.viewer.close();
   const clearing = person === null || litOwner === person.owner;
   litOwner = clearing ? null : person.owner;
   litPerson = clearing ? null : person;
   paintLit();
   paintMany();
-}
-
-// The arrow from a name to its address. A person with no address yet points to their own label.
-function toOwner(person) {
-  if (person.unnamed) return make('span', 'to unnamed', rows.users ? 'unnamed' : 'not read yet');
-  const node = button('to', '→ ' + (person.address ? shortAddress(person.address) : person.label), () => light(person));
-  node.setAttribute('aria-label', person.address ? 'Address ' + person.address + ', by our records' : 'Person ' + person.label);
-  return lightsWith(node, person);
 }
 
 function fact(list, title, value, className) {
@@ -805,12 +862,28 @@ function fact(list, title, value, className) {
   list.append(make('dt', '', title), dd);
 }
 
+const pictures = new Map();
+
+function pictureOf(pointer) {
+  if (pictures.has(pointer.ref)) return pictures.get(pointer.ref);
+  const loading = loadPicture(pointer).then((picture) => {
+    // One that could not be reached is tried again next time.
+    if (picture.state === 'unreachable') pictures.delete(pointer.ref);
+    return picture;
+  }, (problem) => {
+    pictures.delete(pointer.ref);
+    throw problem;
+  });
+  pictures.set(pointer.ref, loading);
+  return loading;
+}
+
 async function fillFrame(photo, frame, note, label) {
   if (!photo.pointer) {
     note.textContent = rows.pointers ? 'No picture on record.' : 'Not read yet.';
     return;
   }
-  const picture = await loadPicture(photo.pointer);
+  const picture = await pictureOf(photo.pointer);
   if (picture.state === 'unreachable') {
     note.textContent = 'This picture cannot be reached just now.';
     return;
@@ -829,7 +902,7 @@ async function fillFrame(photo, frame, note, label) {
   }
   const image = document.createElement('img');
   image.alt = label;
-  image.decoding = 'async';
+  image.decoding = 'sync';
   image.addEventListener('load', () => {
     frame.classList.add('shown');
     frame.replaceChildren(image);
@@ -865,52 +938,72 @@ const labelOf = (state) => state.photo.imageName || 'Photo ' + state.position;
 const signOf = (photo) => [photo.imageName, onChain.has(photo.imageName), photo.person.label, photo.person.address, photo.pointer && photo.pointer.ref,
   Boolean(rows.users), Boolean(rows.pointers), Boolean(rows.names)].join('|');
 
-// One image's row. The picture from Swarm, its seal hash and its person open under it, and load only when first opened.
+// One photo in an open name: a small picture of one size, with its name and badge below. A tap shows it larger.
 function drawImageRow(state) {
   const { photo, item } = state;
   const short = shortImage(photo.imageName);
-  // In a person's list the same short name can come from two events, so the event is said.
-  const place = state.withEvent ? ' · ' + photo.record.event : '';
-  const open = button('name' + (short ? '' : ' none'), (short || (rows.names ? 'No name yet' : 'Not read yet')) + place, () => {
-    let panel = item.querySelector('.panel');
-    if (!panel) {
-      panel = make('div', 'panel');
-      panel.append(loadedFrame(state.photo, labelOf(state)), factsOf(state.photo));
-      item.append(panel);
-    } else {
-      panel.hidden = !panel.hidden;
-    }
-    open.setAttribute('aria-expanded', String(!panel.hidden));
-    paintLit();
-  });
-  const panelNow = item.querySelector('.panel');
-  open.setAttribute('aria-expanded', String(Boolean(panelNow && !panelNow.hidden)));
-  const row = make('div', 'row');
-  row.append(lightsWith(open, photo.person));
-  if (onChain.has(photo.imageName)) {
-    const tick = make('span', 'chain', '✓');
-    tick.title = 'On chain, read from ENS';
-    tick.setAttribute('aria-label', 'On chain, read from ENS');
-    row.append(tick);
+  if (!state.card) {
+    state.card = lightsWith(button('thumb', '', () => openViewer(state)), photo.person);
+    state.frame = loadedFrame(photo, labelOf(state));
+    state.words = make('span', 'thumb-name');
+    state.card.append(state.frame, state.words);
+    item.append(state.card);
   }
-  row.append(toOwner(photo.person));
-  const old = item.querySelector('.row');
-  if (old) old.replaceWith(row);
-  else item.append(row);
+  // In a person's list the same short name can come from two events, so the event is said.
+  state.words.textContent = (short || (rows.names ? 'No name yet' : 'Not read yet')) + (state.withEvent ? ' · ' + photo.record.event : '');
+  state.words.classList.toggle('none', !short);
+  const marked = onChain.has(photo.imageName);
+  const tick = state.card.querySelector('.chain');
+  if (marked && !tick) {
+    const badge = make('span', 'chain', '✓ on chain');
+    badge.title = 'On chain, read from ENS';
+    state.card.append(badge);
+  } else if (!marked && tick) {
+    tick.remove();
+  }
+  state.card.setAttribute('aria-label', labelOf(state) + (marked ? ', on chain' : ''));
 }
 
-// Something about this image changed, such as its name arriving. What is open stays open.
+let viewerState = null;
+
+function showViewer(photo, label, facts) {
+  const close = button('close', '×', () => ui.viewer.close());
+  close.setAttribute('aria-label', 'Close');
+  ui.viewer.replaceChildren(close, loadedFrame(photo, label), facts);
+  ui.viewer.showModal();
+  // The overlay itself takes the focus. Tab goes on to the close button.
+  ui.viewer.focus();
+}
+
+function openViewer(state) {
+  viewerState = state;
+  showViewer(state.photo, labelOf(state), factsOf(state.photo));
+}
+
+ui.viewer.addEventListener('close', () => {
+  viewerState = null;
+  ui.viewer.replaceChildren();
+});
+// One tap closes it, on the photo or outside. Esc closes it too. A tap on the details does not, so that they can be copied.
+ui.viewer.addEventListener('click', (event) => {
+  if (!event.target.closest('.facts')) ui.viewer.close();
+});
+
+// Something about this photo changed, such as its name arriving.
 function updateImage(state, photo) {
   const hadPicture = Boolean(state.photo.pointer);
   state.photo = photo;
   state.sign = signOf(photo);
   drawImageRow(state);
-  const panel = state.item.querySelector('.panel');
-  if (!panel) return;
-  panel.querySelector('.facts').replaceWith(factsOf(photo));
   if (!hadPicture) {
-    panel.querySelectorAll('.mark').forEach((mark) => mark.remove());
-    panel.querySelector('.frame').replaceWith(loadedFrame(photo, labelOf(state)));
+    state.card.querySelectorAll('.mark').forEach((mark) => mark.remove());
+    const next = loadedFrame(photo, labelOf(state));
+    state.frame.replaceWith(next);
+    state.frame = next;
+  }
+  if (viewerState === state) {
+    ui.viewer.querySelector('.facts').replaceWith(factsOf(photo));
+    if (!hadPicture) ui.viewer.querySelector('.frame').replaceWith(loadedFrame(photo, labelOf(state)));
   }
 }
 
@@ -924,7 +1017,7 @@ function updateView(views, key, photos, withEvent) {
   let view = views.get(key);
   const first = !view;
   if (first) {
-    view = { list: make('ul', 'branch'), states: new Map() };
+    view = { list: make('ul', 'thumbs'), states: new Map() };
     views.set(key, view);
   }
   photos.forEach((photo, index) => {
@@ -954,28 +1047,52 @@ function updatePersonView(person) {
 
 // The entry now open on either branch.
 function selectEntry(entry) {
-  for (const other of ui.tree.querySelectorAll('button.entry')) other.setAttribute('aria-current', String(other === entry));
+  for (const other of ui.tree.querySelectorAll('button.entry')) {
+    other.setAttribute('aria-current', String(other === entry));
+    other.setAttribute('aria-expanded', String(other === entry));
+  }
 }
 
-// One entry on a branch. A name with no record is plain text and cannot be tapped, so it never looks real.
+function folderIcon() {
+  const space = 'http://www.w3.org/2000/svg';
+  const icon = document.createElementNS(space, 'svg');
+  icon.setAttribute('class', 'entry-icon');
+  icon.setAttribute('viewBox', '0 0 16 16');
+  icon.setAttribute('aria-hidden', 'true');
+  const shape = document.createElementNS(space, 'path');
+  shape.setAttribute('d', 'M1.75 4.25c0-.55.45-1 1-1h3.1c.3 0 .58.13.77.36l.9 1.14h5.73c.55 0 1 .45 1 1v6c0 .55-.45 1-1 1H2.75c-.55 0-1-.45-1-1z');
+  icon.append(shape);
+  return icon;
+}
+
+// One row on a branch: a chevron, a folder, its name, and at the end a quiet count. A name with no record is plain text and cannot be tapped, so it never looks real.
 function absentEntry(label, word) {
   const item = make('li', '');
   const entry = make('div', 'entry absent');
-  entry.append(make('span', 'entry-name', label), make('span', 'entry-sub', word));
+  entry.append(make('span', 'chevron'), folderIcon(), make('span', 'entry-name', label), make('span', 'entry-count', word));
   item.append(entry);
   return item;
 }
 
-function realEntry(label, sub, subClass, onClick) {
-  const entry = button('entry', '', onClick);
-  entry.append(make('span', 'entry-name', label), make('span', 'entry-sub ' + subClass, sub));
+function realEntry(label, count, isOpen, onClick) {
+  const entry = button('entry', '', () => {
+    if (entry.getAttribute('aria-expanded') === 'true') {
+      closeFolder();
+      return;
+    }
+    selectEntry(entry);
+    onClick();
+  });
+  entry.append(make('span', 'chevron'), folderIcon(), make('span', 'entry-name', label), make('span', 'entry-count', String(count)));
+  entry.setAttribute('aria-label', label + ', ' + count + (count === 1 ? ' photo' : ' photos'));
+  entry.setAttribute('aria-current', String(isOpen));
+  entry.setAttribute('aria-expanded', String(isOpen));
   return entry;
 }
 
 function usersLimb(people, known) {
   const limb = make('section', 'limb');
   limb.append(make('h2', '', 'Users'));
-  if (people.some((person) => person.address)) limb.append(make('p', 'caption', 'Addresses by our records'));
   const list = make('ul', 'branch');
   const labels = [...USERS, ...people.map((person) => person.label).filter((label) => !USERS.includes(label))];
   for (const label of labels) {
@@ -984,14 +1101,8 @@ function usersLimb(people, known) {
       list.append(absentEntry(label, known ? 'not yet' : 'not read'));
       continue;
     }
-    const marked = onChain.has(person.name);
-    const sub = (person.address ? shortAddress(person.address) : 'no address yet') + (marked ? ' · on chain' : '');
-    const entry = realEntry(label, sub, person.address ? 'code' : '', () => {
-      selectEntry(entry);
-      openPerson(person);
-    });
-    entry.setAttribute('aria-current', String(Boolean(currentPerson) && currentPerson.owner === person.owner));
-    if (person.address) entry.setAttribute('aria-label', label + ', address ' + person.address + ', by our records' + (marked ? ', on chain' : ''));
+    const isOpen = Boolean(currentPerson) && currentPerson.owner === person.owner;
+    const entry = realEntry(label, photosOfPerson(person).length, isOpen, () => openPerson(person));
     const item = make('li', '');
     item.append(lightsWith(entry, person));
     list.append(item);
@@ -1000,7 +1111,7 @@ function usersLimb(people, known) {
   return limb;
 }
 
-function eventsLimb(events, complete) {
+function eventsLimb(events) {
   const limb = make('section', 'limb');
   limb.append(make('h2', '', 'Events'));
   const list = make('ul', 'branch');
@@ -1011,13 +1122,7 @@ function eventsLimb(events, complete) {
       list.append(absentEntry(slug, 'not yet'));
       continue;
     }
-    // A picture's name on chain means its event's name is on chain too.
-    const marked = photos.some((photo) => onChain.has(photo.imageName));
-    const entry = realEntry(slug, countLine(photos, complete) + (marked ? ' · on chain' : ''), '', () => {
-      selectEntry(entry);
-      openEvent(slug);
-    });
-    entry.setAttribute('aria-current', String(!currentPerson && slug === currentEvent));
+    const entry = realEntry(slug, photos.length, !currentPerson && slug === currentEvent, () => openEvent(slug));
     const item = make('li', '');
     item.append(entry);
     list.append(item);
@@ -1208,15 +1313,67 @@ function showCount() {
   ui.event.textContent = currentPerson ? currentPerson.label : currentEvent;
 }
 
-// The event on top, and its images under the tree.
+let folderClosedByHand = false;
+
+// The open name holds what it is about, and the legend once, if a photo there is on chain.
+function paintFolderWords() {
+  const photos = currentPerson ? photosOfPerson(currentPerson) : latest.events.get(currentEvent) || [];
+  const marked = photos.some((photo) => onChain.has(photo.imageName));
+  ui.legend.hidden = !marked;
+  if (currentPerson) {
+    const where = currentPerson.address ? 'Address, by our records: ' + shortAddress(currentPerson.address) : 'no address yet';
+    ui.folderInfo.textContent = where + (onChain.has(currentPerson.name) ? ' · on chain' : '');
+  } else if (currentEvent) {
+    ui.folderInfo.textContent = countLine(photos, latest.complete) + (marked ? ' · on chain' : '');
+  }
+}
+
+function placeFolder() {
+  const open = ui.tree.querySelector('button.entry[aria-expanded="true"]');
+  if (open) open.closest('li').append(ui.images);
+}
+
+function showFolder(parts) {
+  ui.folder.replaceChildren(ui.folderInfo, ...parts, ui.legend);
+  paintFolderWords();
+  placeFolder();
+  ui.images.hidden = false;
+  // From closed, so that each name opens the same way.
+  ui.images.style.transition = 'none';
+  ui.images.classList.remove('open');
+  void ui.images.offsetHeight;
+  ui.images.style.transition = '';
+  ui.images.classList.add('open');
+  paintLit();
+}
+
+function closeFolder() {
+  folderClosedByHand = true;
+  currentEvent = null;
+  currentPerson = null;
+  selectEntry(null);
+  showCount();
+  ui.images.classList.remove('open');
+}
+
+// The branches are built again here. Keyboard focus stays on the same name.
+function drawLimbs(model, events) {
+  const active = document.activeElement;
+  const focused = active && active.classList.contains('entry') ? active.querySelector('.entry-name').textContent : null;
+  ui.tree.querySelector('.split').replaceChildren(usersLimb(model.named, rows.users !== null), eventsLimb(events));
+  placeFolder();
+  if (focused === null) return;
+  for (const entry of ui.tree.querySelectorAll('button.entry')) {
+    if (entry.querySelector('.entry-name').textContent === focused) entry.focus({ preventScroll: true });
+  }
+}
+
+// An event opens in place, with its images inside.
 function openEvent(slug) {
   currentEvent = slug;
   currentPerson = null;
   showCount();
-  const view = updateEventView(slug, latest.events.get(slug) || []);
-  ui.images.replaceChildren(make('h2', '', slug), view.list);
-  ui.images.hidden = false;
-  paintLit();
+  showFolder([updateEventView(slug, latest.events.get(slug) || []).list]);
 }
 
 // A person's images, from every event, in the same place.
@@ -1226,9 +1383,7 @@ function openPerson(person) {
   currentEvent = null;
   showCount();
   const view = updatePersonView(person);
-  ui.images.replaceChildren(make('h2', '', person.label), view.none, view.list);
-  ui.images.hidden = false;
-  paintLit();
+  showFolder([view.none, view.list]);
 }
 
 function showFailure(failure) {
@@ -1281,7 +1436,7 @@ function draw(linked) {
   ]);
   if (sign !== limbsSign) {
     limbsSign = sign;
-    ui.tree.querySelector('.split').replaceChildren(usersLimb(model.named, rows.users !== null), eventsLimb(events, latest.complete));
+    drawLimbs(model, events);
   }
   for (const [slug, view] of eventViews) {
     if (view) updateEventView(slug, events.get(slug) || []);
@@ -1293,24 +1448,24 @@ function draw(linked) {
   if (sealSlug) {
     openEvent(sealSlug);
     limbsSign = null;
-    ui.tree.querySelector('.split').replaceChildren(usersLimb(model.named, rows.users !== null), eventsLimb(events, latest.complete));
+    drawLimbs(model, events);
   }
   if (currentEvent || currentPerson) {
     showCount();
-  } else {
+  } else if (!folderClosedByHand) {
     const withPhotos = [...EVENTS, ...events.keys()].filter((slug) => (events.get(slug) || []).length > 0);
     const first = linked && (events.get(linked) || []).length > 0 ? linked : withPhotos[0];
     if (first) {
       openEvent(first);
       limbsSign = null;
-      ui.tree.querySelector('.split').replaceChildren(usersLimb(model.named, rows.users !== null), eventsLimb(events, latest.complete));
+      drawLimbs(model, events);
     }
   }
   paintLit();
   paintMany();
   markSealRow();
   paintSealWatch();
-  ui.legend.hidden = ![...events.values()].flat().some((photo) => onChain.has(photo.imageName));
+  paintFolderWords();
   const checks = [];
   for (const person of model.named) {
     if (person.name) checks.push({ name: person.name, address: person.address });
@@ -1434,7 +1589,15 @@ function showSealPicture(watch) {
   if (!watch.frame) {
     watch.frame = loadedFrame({ pointer: watch.pointer }, label);
     watch.frameAt = Date.now();
-    watch.box.append(watch.frame);
+    const small = button('thumb', '', () => {
+      const facts = make('dl', 'facts');
+      if (watch.imageName) fact(facts, 'Name', watch.imageName, 'code');
+      fact(facts, 'Seal hash', watch.hash, 'code');
+      showViewer({ pointer: watch.pointer }, watch.imageName || 'This photo', facts);
+    });
+    small.setAttribute('aria-label', label);
+    small.append(watch.frame);
+    watch.box.append(small);
     return;
   }
   const note = watch.frame.querySelector('.note');
