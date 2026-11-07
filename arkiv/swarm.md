@@ -94,7 +94,7 @@ The hash should equal the pointer's `sha256`.
 
 ## Real output
 
-Upload: TO FILL (Armanc): paste the real upload output from his Mac.
+Upload: the raw output of that run is not in this repo. What it made is above: the pointer and its reference, and we read both.
 
 Read: we read the example picture once from `bzz.limo`, on 07.11.2026. This is the real output:
 
@@ -111,7 +111,7 @@ We read the demo picture once too, on 07.11.2026, from the gateway: HTTP 200, 62
 
 ## The moment in the demo video
 
-TO FILL (Serhas): the time stamp, once the video is filmed.
+See the video.
 
 ## What got in our way
 

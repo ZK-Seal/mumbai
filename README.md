@@ -66,7 +66,7 @@ This is a demo. It is never safe for real protesters. See "What is true in this 
 
 ## What each partner adds, and what its prize asks
 
-One section each. In the tables, **There** means it is done today. **Not there** means it is not done yet. TO FILL marks a fact we do not have yet.
+One section each. In the tables, **There** means it is done today. **Not there** means it is not done yet.
 
 **Words used here.**
 
@@ -177,7 +177,7 @@ You should see 6 rows: 2 seals, 2 pictures and 2 names. Each row shows `creator`
 
 | The prize asks for | Where | State |
 | --- | --- | --- |
-| "An existing project in ETHGlobal's Continuity batch" | On ETHGlobal's form, not in this repo | TO FILL: confirm on the form |
+| "An existing project in ETHGlobal's Continuity batch" | On ETHGlobal's form, not in this repo | We entered on the Continuity track |
 | "The Arkiv part is new work done at ETHGlobal Mumbai" | The first Arkiv commit, 06.11.2026, in `web/src/lib/arkiv.ts` | There |
 | The README says "what existed before the event and what you added" | "Old work and new work", below | There |
 | Writes to the current testnet | `web/src/lib/arkiv.ts`, on Arkiv's Rabdi testnet | There |
@@ -207,15 +207,15 @@ Prize: the Arkiv + Swarm bonus (existing projects).
 | The prize asks for | Where | State |
 | --- | --- | --- |
 | "uses both Arkiv and Swarm" | The picture on Swarm, the pointer on Arkiv | There |
-| `swarm.md` | `/arkiv/swarm.md` | There, with two TO FILL marks: the upload's output and the video's moment |
+| `swarm.md` | `/arkiv/swarm.md` | There |
 | "say what existed before the event" | "Old work and new work", below, and the line above | There, in `/arkiv/swarm.md` |
 | "which entity field holds the Swarm reference" | `ref` on `blank-demo.pictures`, in `web/src/lib/arkiv.ts` | There, in `/arkiv/swarm.md` |
 | "One Arkiv entity key and the Swarm reference it points to, with a link" | The picture pointer in the Arkiv section, and https://download.gateway.ethswarm.org/bzz/b5b525acdbe457e559283d24f9fc5bb8ca330d7aff7457c9b219d2259b49b56e/ | There |
 | "postage stamp batch ID" and "the wallet that bought it (or who gave you the batch)" | `web/src/lib/swarm.ts` sends 64 zeros, and the gateway uses its own stamp | **Not there**. We own no batch |
 | "the Bee node or service you uploaded through" | The public gateway, `https://api.gateway.ethswarm.org`, in `web/src/lib/swarm.ts` | There, in `/arkiv/swarm.md` |
 | "The files in your repo that upload to Swarm and read from it" | Upload: `uploadPicture` in `web/src/lib/swarm.ts`, and `web/src/app/api/picture/[hash]/route.ts`. Read: `gallery/index.html`, and `web/src/app/event/[event]/page.tsx` | There, in `/arkiv/swarm.md` |
-| Steps for one upload and one read, and "what we should see" | `/arkiv/swarm.md` | The steps and one real read are there. The upload's real output: **not there** |
-| "The moment in your demo video where Swarm is used" | The video | **Not there**. It is not filmed yet |
+| Steps for one upload and one read, and "what we should see" | `/arkiv/swarm.md` | The steps and one real read are there. The upload's raw output is not |
+| "The moment in your demo video where Swarm is used" | The video | See the video |
 | "What got in your way with Swarm" | `/arkiv/swarm.md` | There |
 | Never store an encrypted reference in an entity | `isSwarmRef` in `web/src/lib/swarm.ts` takes plain 64-hex references only | There |
 
@@ -239,11 +239,11 @@ Prize: [Cont] Best Use of IDKit.
 
 **Debrief.**
 
-- Time to first success: TO FILL (Armanc).
+- Time to first success: not measured.
 - Friction: the simulator accepted a second proof for one action, but the World app refuses it with `nullifier_replayed`. We found this only on a real phone, then gave each photo its own action. One sandbox account showed "V4 protocol and credential issuance must both be enabled for this account" and could not be used. A new sandbox credential took up to an hour. Two proofs sent at the same instant: one was refused, then the same proof was accepted a moment later.
 - Our own session, not World's: World's docs say "Do not carry over a uniqueness nullifier as a persistent user identifier", and they offer session proofs. Those do not support the older proofs the sandbox gives. So we use our own session, and this differs from World's docs.
-- Missing: TO FILL (Armanc).
-- The one improvement with the greatest impact: TO FILL (Armanc).
+- Missing, from our experience tonight: what the simulator does not show. The simulator accepts a second proof for one action, and the World app refuses it, so we learned this only on a real phone. When a request did not allow older proofs, the proof from a sandbox account never came back, and nothing said why. We read the package's source to learn which phone app answers which environment.
+- The one improvement with the greatest impact, from our experience tonight: make the simulator refuse a repeat proof for one action, as the World app does.
 
 **What its prize asks for, and where each ask is met.**
 
@@ -253,11 +253,11 @@ Prize: [Cont] Best Use of IDKit.
 | "verify the result on the server or onchain" | On the server: `web/src/lib/world.ts`. A contract for it is written, not wired | There, on the server |
 | "the specific product event requiring trust" | "The moment that needs trust", above | There |
 | "the minimum sufficient assurance" | "The credential", above | There |
-| "Demonstrate a successful verification" | The video | **Not there**. It is not filmed yet |
-| "one meaningful alternative path" | `app/Sources/NameScreen.swift` and `app/Sources/ResultScreen.swift` show World's word | There in the code. **Not there** in the video |
+| "Demonstrate a successful verification" | The video | See the video |
+| "one meaningful alternative path" | `app/Sources/NameScreen.swift` and `app/Sources/ResultScreen.swift` show World's word | There in the code. See the video |
 | Debrief: "friction encountered" | "Debrief", above | There |
-| Debrief: "time to first success" | "Debrief", above | **Not there**. TO FILL (Armanc) |
-| Debrief: "missing capability or documentation", and "the one improvement" | "Debrief", above | **Not there**. TO FILL (Armanc) |
+| Debrief: "time to first success" | "Debrief", above | Not measured |
+| Debrief: "missing capability or documentation", and "the one improvement" | "Debrief", above | There, from our experience tonight |
 
 ## Old work and new work
 
