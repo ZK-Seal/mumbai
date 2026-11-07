@@ -101,15 +101,11 @@ final class WorldStep {
 
     private var polling: Task<IDKitCompletionResult, Never>?
 
-    /// With the person's session there is no second World trip: their name was proved at join, and the web side files this photo under it.
-    /// Without a session, the photo has its own World step and stays unnamed.
+    /// Every photo has its own World step, so World proves a unique human approved this exact photo.
+    /// With the person's session, the web side files it under their name. Without one, the photo stays unnamed.
     /// The ticket says the service checked this hash. It goes both in the body and as a header.
     /// `entry` is the SHA-256 of the person's scanned badge for this event.
     func run(base: String, hash: String, event: String?, session: String?, ticket: String?, entry: String?) async -> Outcome {
-        if let session {
-            let finish: Finish? = await post(base, "/api/world/verify", body(hash: hash, event: event, session: session, ticket: ticket, entry: entry), limit: 120, ticket: ticket)
-            return await ending(finish, base: base, hash: hash)
-        }
         guard let start: Start = await post(base, "/api/world/request", body(hash: hash, event: event, ticket: ticket, entry: entry), limit: 15, ticket: ticket) else { return .useSheet }
         // This answer carries the seal's record itself.
         if start.state == "authorised" { return .authorised(pictureToken: nil, image: nil) }
@@ -122,11 +118,11 @@ final class WorldStep {
         case .cannotStart: return .useSheet
         case .unreadable: return .notAuthorised
         }
-        let finish: Finish? = await post(base, "/api/world/verify", body(hash: hash, event: event, result: json, ticket: ticket, entry: entry), limit: 120, ticket: ticket)
+        let finish: Finish? = await post(base, "/api/world/verify", body(hash: hash, event: event, result: json, session: session, ticket: ticket, entry: entry), limit: 120, ticket: ticket)
         return await ending(finish, base: base, hash: hash)
     }
 
-    /// What the web side's last answer means, for a photo with or without a session.
+    /// What the web side's last answer means.
     private func ending(_ finish: Finish?, base: String, hash: String) async -> Outcome {
         if finish?.reason == "no-entry" { return .noEntry }
         if finish?.reason == "session" { return .sessionRefused(text: Self.words(finish?.text)) }

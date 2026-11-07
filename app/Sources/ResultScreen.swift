@@ -33,6 +33,7 @@ struct ResultScreen: View {
     let onDone: () -> Void
 
     @AppStorage("webAddress") private var webAddress = ""
+    @AppStorage("siteAddress") private var siteAddress = ""
     @AppStorage("cover") private var cover = Cover.mask
     @AppStorage("event") private var event = ""
     @AppStorage("userName") private var userName = ""
@@ -210,7 +211,7 @@ struct ResultScreen: View {
         showScan = true
     }
 
-    /// Publish, in this order: the nickname and its World step if the person has no name yet, then the badge if the event needs one, then the photo. With a session the photo needs no second World trip. With none it has its own World step.
+    /// Publish, in this order: the nickname and its World step if the person has no name yet, then the badge if the event needs one, then the photo's own World step.
     private func pressPublish(_ link: URL) {
         guard userName.isEmpty else {
             goOn(link)
@@ -220,8 +221,8 @@ struct ResultScreen: View {
         showNameStep = true
     }
 
-    /// With a session, straight to the web side. With none, first the World app, with no page between.
-    /// If the web side cannot be read or the World app cannot be opened, the page in a sheet does the same step.
+    /// First the World app, with no page between. If the web side cannot be read or the World app cannot be opened,
+    /// the page in a sheet does the same step.
     /// The page's way back is only a hint. The word shows only after the web side answers with a record for this seal.
     private func authorise(_ link: URL) {
         authorising = .waiting
@@ -237,6 +238,7 @@ struct ResultScreen: View {
                 pictureToken = token
                 sendPicture()
                 watchImage()
+                openSite()
             case .notAuthorised:
                 authorising = .notAuthorised
             case .worldFailed(let word):
@@ -268,8 +270,15 @@ struct ResultScreen: View {
                 }
                 authorising = .authorised
                 watchImage()
+                openSite()
             }
         }
+    }
+
+    /// The site, at this photo, in the browser, where the person watches it go on chain. Nothing about the person goes with it.
+    private func openSite() {
+        guard let link = AuthoriseLink.siteLink(fromSettings: siteAddress, hash: result.hash) else { return }
+        UIApplication.shared.open(link)
     }
 
     /// Sends only the picture on this screen: the backend's plain copy with the cover flattened onto it.
@@ -278,7 +287,10 @@ struct ResultScreen: View {
         guard let picture, let pictureToken else { return }
         sending = .sending
         let base = AuthoriseLink.base(fromSettings: webAddress)
+        // The site opens right after this starts, so the app asks for time to finish the send while it is behind the browser.
+        let keepGoing = UIApplication.shared.beginBackgroundTask(withName: "Picture")
         Task {
+            defer { UIApplication.shared.endBackgroundTask(keepGoing) }
             let jpeg = await Task.detached(priority: .userInitiated) { PictureUpload.jpeg(from: picture) }.value
             if let jpeg, await PictureUpload.send(jpeg, base: base, hash: result.hash, token: pictureToken, ticket: result.ticket) {
                 sending = .none

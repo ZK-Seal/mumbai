@@ -27,6 +27,21 @@ enum AuthoriseLink {
         ProcessInfo.processInfo.environment["EVENT_SLUG"] != nil
     }
 
+    /// Where the site is, from the SITE_URL environment variable, else from Settings, else its ENS name.
+    /// So it can change with no rebuild.
+    static func site(fromSettings text: String) -> String {
+        let value = (ProcessInfo.processInfo.environment["SITE_URL"] ?? text).trimmingCharacters(in: .whitespaces)
+        return value.isEmpty ? "https://zk-seal.eth.limo/" : value
+    }
+
+    /// The site, at one photo: <site>#seal=<hash>. Nil if the site is not a web address.
+    static func siteLink(fromSettings text: String, hash: String) -> URL? {
+        guard var parts = URLComponents(string: site(fromSettings: text)),
+              ["http", "https"].contains(parts.scheme ?? ""), parts.host != nil else { return nil }
+        parts.fragment = "seal=\(hash)"
+        return parts.url
+    }
+
     /// A path on the web address. Nil if the base is empty or is not a web address.
     private static func place(base: String, path: String) -> URLComponents? {
         guard !base.isEmpty, var parts = URLComponents(string: base),

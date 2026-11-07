@@ -6,6 +6,7 @@ struct AreaScreen: View {
     @AppStorage("serviceAddress") private var serviceAddress = ""
     @AppStorage("accessWord") private var accessWord = ""
     @AppStorage("webAddress") private var webAddress = ""
+    @AppStorage("siteAddress") private var siteAddress = ""
     @AppStorage("event") private var event = ""
     @AppStorage("cover") private var cover = Cover.mask
     @AppStorage("userName") private var userName = ""
@@ -226,6 +227,10 @@ struct AreaScreen: View {
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .keyboardType(.URL)
+                    TextField("Site address", text: $siteAddress)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .keyboardType(.URL)
                     EventChooser(plain: true)
                 }
                 .listRowBackground(Theme.surface)
@@ -324,6 +329,7 @@ struct AreaScreen: View {
         if let address = given["SERVICE_URL"], !address.isEmpty { serviceAddress = address }
         if let word = given["SERVICE_WORD"], !word.isEmpty { accessWord = word }
         if let web = given["WEB_URL"], !web.isEmpty { webAddress = web }
+        if let site = given["SITE_URL"], !site.isEmpty { siteAddress = site }
         if let name = given["EVENT_SLUG"], !name.isEmpty { event = name }
     }
 
