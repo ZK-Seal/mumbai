@@ -10,6 +10,7 @@ struct AreaScreen: View {
     @AppStorage("event") private var event = ""
     @AppStorage("cover") private var cover = Cover.mask
     @AppStorage("userName") private var userName = ""
+    @AppStorage("userLabel") private var userLabel = ""
 
     /// The grid the shape snaps to, in photo pixels.
     private static let cell = 16
@@ -109,6 +110,7 @@ struct AreaScreen: View {
         .background(Theme.background.ignoresSafeArea())
         .task(id: pick) { await load() }
         .onAppear { keepLaunchSettings() }
+        .task { await refreshName() }
         .onChange(of: cover) { shapesChanged() }
         .sheet(item: $finished) { job in
             ResultScreen(client: job.client, jobID: job.id, result: job.result, boxes: job.boxes, cell: job.cell,
@@ -269,6 +271,7 @@ struct AreaScreen: View {
         }
         .tint(Theme.accent)
         .presentationBackground(Theme.background)
+        .task { await refreshName() }
     }
 
     /// The photo with its cover and the finger's line, which all zoom and move together, and the area that takes
@@ -331,6 +334,15 @@ struct AreaScreen: View {
         if let web = given["WEB_URL"], !web.isEmpty { webAddress = web }
         if let site = given["SITE_URL"], !site.isEmpty { siteAddress = site }
         if let name = given["EVENT_SLUG"], !name.isEmpty { event = name }
+    }
+
+    /// The name the web side lists now, so a name saved on an earlier run does not stay.
+    private func refreshName() async {
+        let base = AuthoriseLink.base(fromSettings: webAddress)
+        guard !base.isEmpty, let label = Names.savedLabel(userLabel, name: userName) else { return }
+        if let found = await Names.listing(base: base, label: label), found.name != userName {
+            userName = found.name
+        }
     }
 
     private func endLine() {
