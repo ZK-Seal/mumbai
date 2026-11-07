@@ -22,7 +22,7 @@ We have not offered it to anyone yet. For now it is a demo.
 
 ## Can they use it today
 
-No. The writing server runs on Armanc's Mac, and it is not public tonight. The read-only public link comes after the real run.
+No. The writing server runs on Armanc's Mac, and it is not public tonight. By Armanc's word, not checked by us, the read-only public link is up: https://blank-demo-two.vercel.app/event/ethglobal.
 
 - Link to the event page: no demo event rows yet.
 - Entities written so far: no demo event rows yet.

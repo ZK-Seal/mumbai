@@ -68,7 +68,7 @@ You should see `{"state":"stored","ref":"<64 hex>","url":"https://download.gatew
 
 Read through our server. This needs a public address, and we do not have one yet.
 
-Public link: TO FILL (Armanc): the read-only web address, once it is up.
+Public link: https://blank-demo-two.vercel.app/event/ethglobal. By Armanc's word, not checked by us.
 
 ```bash
 curl "$WEB/api/seal/$HASH"
@@ -113,6 +113,6 @@ TO FILL (Serhas): the time stamp, once the video is filmed.
 ## Limits
 
 Swarm retention through the public gateway is not guaranteed.
-The link between a picture and its seal is the uploader's word, backed by the World proof behind their name, or by a World proof for that photo if they have no name. Our web server cannot open the sealed file.
+The link between a picture and its seal is the uploader's word, backed by their World proof for that photo. Our web server cannot open the sealed file.
 Our server does not check the seal. So a named person can file a made-up hash, and upload a picture for it.
-World proves "approved by a unique human", not "taken by". For a named person, the approval is of the name, not of each photo.
+World proves "approved by a unique human", not "taken by".

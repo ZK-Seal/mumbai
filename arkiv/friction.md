@@ -14,7 +14,6 @@ Only what really happened to us. Part 1 comes from real writes. These are test r
 
 Nothing broke. A real World proof went to a record on Rabdi, a picture on Swarm and a pointer on Rabdi, and read back through our routes after a restart, with the file store empty. No bug found in `arkiv.ts`.
 A later run wrote all four kinds under `test-run-b`: user, seal, picture, name. After a restart, all four read back from Arkiv.
-The path with no World step for a named photo has not written a row to Arkiv yet.
 
 Measured:
 - Gas used, from the receipts. Under `test-run-a`: records 205,171, 192,375 and 192,375; pointers 185,531, 183,527 and 183,527. Under `test-run-b`: user 181,930, name 178,992. Gas limit 1,000,000. Before the writes, estimate calls gave 214k and 206k.

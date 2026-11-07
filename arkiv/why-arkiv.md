@@ -50,11 +50,11 @@ Each row shows `creator`, and `creationFlags` with `readonly` true. Wallet in th
 
 ## Honest limits
 
-1. World proves "approved by a unique human", not "taken by". For a named person, the approval is of the name, not of each photo.
-2. The link between a picture and its seal is the uploader's word, backed by the World proof behind their name, or by a World proof for that photo if they have no name. Our web server cannot open the sealed file.
+1. World proves "approved by a unique human", not "taken by".
+2. The link between a picture and its seal is the uploader's word, backed by their World proof for that photo. Our web server cannot open the sealed file.
 3. Swarm retention through the public gateway is not guaranteed.
 4. A name is a linkable pseudonym, not a real identity. This demo is never safe for real protesters.
 5. The link between a photo and a named person is our server's session, not World's number.
 
 A seal shows a proven edit of a signed original (our test key in this demo).
-Our server does not check the seal. So a named person can file a made-up hash, with no World step. The authorise step checks only the hash's format, so anyone can type a made-up hash and authorise it. The app sends a ticket from the sealing service, but the web side does not read it.
+Our server does not check the seal. So a named person can file a made-up hash. The authorise step checks only the hash's format, so anyone can type a made-up hash and authorise it. The app sends a ticket from the sealing service, but the web side does not read it.

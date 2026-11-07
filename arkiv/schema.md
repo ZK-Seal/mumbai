@@ -10,9 +10,8 @@ All four are defined in `web/src/lib/arkiv.ts`.
 
 ## Entity 1: authorisation record
 
-One record says: one person published this seal's hash, under a name proved through World, or with a World proof for this photo.
-A named person passes World once, for the name. Our server files that person's later photos from their session, with no World step.
-An anonymous photo has one World step of its own.
+One record says: one person approved this seal's hash through World. World proves a unique human approved this exact photo; the session says which username.
+A person passes World once for the name, and again for every photo. A photo with no session has no username.
 Schema tag: `blank-demo.seals`. Code: `Seals` in `web/src/lib/arkiv.ts`.
 
 | Field | Type | Indexed? | What it holds |

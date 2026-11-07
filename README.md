@@ -2,7 +2,7 @@
 
 An iPhone app, a web side and a gallery page. Together they show two things about an event's photos: what was changed, and how many people stand behind them.
 
-Demo link: TO FILL (Armanc): the public read-only link.
+Demo link: https://blank-demo-two.vercel.app/event/ethglobal. This is the public read-only site. By Armanc's word, not checked by us.
 
 Prototype, not audited.
 
@@ -32,8 +32,8 @@ This is a demo. It is never safe for real protesters. See "What is true in this 
   THE APP
   3. Draw the cover on top. The person presses Publish
      The first time: a nickname and a World proof     ---->  WORLD
-     Later photos under that name: no second World trip
-         |  the session, then the picture with its cover
+     Every photo: a World proof for this photo's hash ---->  WORLD
+         |  the World proofs and the session, then the picture with its cover
          v
   THE WEB SIDE
   4. Check the proof with World, and the session
@@ -44,6 +44,7 @@ This is a demo. It is never safe for real protesters. See "What is true in this 
   THE GALLERY PAGE, in any browser, with no server of ours
   8. Read the records from ARKIV and the pictures from SWARM.
      Show each event's photos and how many named people stand behind them.
+     The app opens this page at the photo, and the page follows it until it is on chain.
 ```
 
 ## How the app and the web side work together
@@ -53,12 +54,12 @@ This is a demo. It is never safe for real protesters. See "What is true in this 
 | App | `app/` | Takes the photo, draws the cover, opens the World ID app, and shows the result |
 | Backend | Closed, not in this repo | Seals the photo and checks the proof. It removes the files after the job |
 | Web side | `web/` | Checks World proofs, keeps records on Arkiv, keeps pictures on Swarm, and makes the names |
-| Gallery | `gallery/` | One page that reads Arkiv and Swarm from the browser. It shows an event's images or a person's images, and asks ENS which names are on chain |
+| Gallery | `gallery/` | One page that reads Arkiv and Swarm from the browser. It shows an event's images or a person's images, follows one photo from a link, and asks ENS which names are on chain |
 | Contracts | `contracts/` | Registrars, written and fork-tested, not wired |
 
 1. **Seal.** The person draws over part of a photo. The backend seals it and returns a plain picture and a hash.
 2. **Publish, the first time.** The person chooses a nickname and proves through World that they are one human. The web side refuses a name that is taken, makes the name in the background, keeps a user row on Arkiv, and gives the app a session.
-3. **Publish, each photo.** If an event is set, the person scans a badge once for that event. With a session there is no second World trip: the app sends the hash and the session, and the web side keeps a record on Arkiv under the person's name. With no session, the person approves the hash through World, and the photo stays unnamed. The app sends the picture with its cover. The web side puts it on Swarm, keeps a pointer on Arkiv, and makes the image's name.
+3. **Publish, each photo.** If an event is set, the person scans a badge once for that event. The person approves this photo's hash through World. With a session, the web side keeps a record on Arkiv under the person's name. With no session, the photo stays unnamed. The app sends the picture with its cover. The web side puts it on Swarm, keeps a pointer on Arkiv, and makes the image's name. The app then opens the gallery page at this photo.
 4. **Read.** The gallery page reads Arkiv and Swarm, and shows each event's images with their names and their people's names.
 
 ## What each partner adds, and what its prize asks
@@ -78,7 +79,7 @@ One section each. In the tables, **There** means it is done today. **Not there**
 
 Prize: Best Integration of ENSv2 into an Existing Project.
 
-**How we use it.** ENS is used like a folder tree. People and pictures get ENS names, with records on them. A name under `users` exists only after our server has checked a person's World proof. A name under an event exists only after a named person published that seal.
+**How we use it.** ENS is used like a folder tree. People and pictures get ENS names, with records on them. A name under `users` exists only after our server has checked a person's World proof. A name under an event exists only after a named person approved that seal through World.
 
 ```text
 <root>.eth
@@ -91,7 +92,7 @@ Prize: Best Integration of ENSv2 into an Existing Project.
       └─ image2.ethglobal...       ----->  address B
 ```
 
-Once the root switch is real, a person's name is `<nickname>.users.zk-seal.eth`. That switch is not there yet: `zk-seal.eth` is registered on mainnet, and the tree is not under it. The web side's root is one setting, `DESK_NAME`, with `armanc.eth` as its default. The app shows whatever name the web side returns.
+Once the root switch is real, a person's name is `<nickname>.users.zk-seal.eth`. By Armanc's word, not checked by us, the owner's steps for `zk-seal.eth` are done on mainnet, and the tree setup is next. So that switch is not there yet. The web side's root is one setting, `DESK_NAME`, with `armanc.eth` as its default. The app shows whatever name the web side returns.
 
 **What it adds to the project.** So far the tree ran only on a local fork of mainnet.
 
@@ -105,12 +106,12 @@ Once the root switch is real, a person's name is `<nickname>.users.zk-seal.eth`.
 
 | The prize asks for | Where | State |
 | --- | --- | --- |
-| "Integration must use ENSv2 on Ethereum mainnet" | `web/src/lib/tree.ts`. The tree ran on a local fork of mainnet, with a phone and no real money | **Not there** on mainnet. TO FILL (Armanc): which names, under which root, and one link |
+| "Integration must use ENSv2 on Ethereum mainnet" | `web/src/lib/tree.ts`. The tree ran on a local fork of mainnet, with a phone and no real money | **Not there** yet. By Armanc's word, not checked by us, the owner's steps are done and the tree setup is next. TO FILL (Armanc): which names, under which root, and one link |
 | "integrate it into an existing project" | zkSeal is the existing project. The tree is in `web/src/lib/tree.ts` | There |
 | "It should be clear how ENSv2 improves the project" | "What it adds to the project", above | There |
 | "not just include hard-coded values" | A name comes from a real check: `registerUser` in `web/src/lib/tree.ts`. The gallery starts from six names, and each shows as real only with a row on Arkiv. Any other name found in a real row is listed after them. Clicking an event or a person shows their images | There in the code. **Not there** on mainnet |
 | "not just a cosmetic add-on" | Names come from real checks. The gallery lists names from Arkiv, and marks one "on chain" only if ENS on mainnet holds its exact record, read from the browser through the Universal Resolver | There in the code. It has never run, and no name of this tree is on mainnet yet, so no mark can show today |
-| "must have a link to a live demo" | The demo link at the top | **Not there** |
+| "must have a link to a live demo" | The demo link at the top | There. By Armanc's word, not checked by us. The ENS name opening the page: **not there** |
 | "code needs to be open source and accessible on Github" | This repo, under MIT | There |
 
 **Its limits.**
@@ -167,7 +168,7 @@ You should see six rows, of two kinds. These are test rows. TO FILL (Armanc): th
 | "The Arkiv part is new work done at ETHGlobal Mumbai" | The first Arkiv commit, 06.11.2026, in `web/src/lib/arkiv.ts` | There |
 | The README says "what existed before the event and what you added" | "Old work and new work", below | There |
 | Writes to the current testnet | `web/src/lib/arkiv.ts`, on Arkiv's Rabdi testnet | There, with test rows |
-| "at least one feature users see reads its data from Arkiv" | `eventPhotos` in `web/src/lib/records.ts`, and `kindQuery` in `gallery/index.html` | There in the code. **Not there** on a link a judge can open |
+| "at least one feature users see reads its data from Arkiv" | `eventPhotos` in `web/src/lib/records.ts`, and `kindQuery` in `gallery/index.html` | There in the code. On a link a judge can open: the demo link at the top. By Armanc's word, not checked by us |
 | The README gives "the wallet address(es) that wrote your entities" | Above | There |
 | The README gives "one query we can run" | Above | There, on test rows |
 | `schema.md`, `friction.md`, `reach.md`, `why-arkiv.md`, `how-you-use-arkiv.md` | `/arkiv/` | There |
@@ -209,7 +210,7 @@ Prize: the Arkiv + Swarm bonus (existing projects).
 
 Prize: [Cont] Best Use of IDKit.
 
-**How we use it.** A named person passes World once, for the name. Their later photos have no World step. A photo with no name still has its own World proof each time. The app opens the World ID app through World's Swift package, IDKit, pinned to 4.2.0. The web side checks each proof with World before it writes anything (`web/src/lib/world.ts`).
+**How we use it.** A person passes World once for the name, and again for every photo they publish. World proves a unique human approved this exact photo; the session says which username. A photo with no session has no username. The app opens the World ID app through World's Swift package, IDKit, pinned to 4.2.0. The web side checks each proof with World before it writes anything (`web/src/lib/world.ts`).
 
 **What it adds to the project.** Without World, one person with several phones looks like a crowd. With it, a page can count how many people stand behind an event's photos, and it does not need to know who they are.
 
@@ -217,9 +218,9 @@ Prize: [Cont] Best Use of IDKit.
 
 **The credential.** Proof of Human. Why it is the least that is enough: TO FILL (Armanc).
 
-**What it proves.** "Approved by a unique human", not "taken by". For a named person, the approval is of the name, not of each photo. The identities in this demo are test identities.
+**What it proves.** "Approved by a unique human", not "taken by". The identities in this demo are test identities.
 
-**One proof per name.** A person proves once, at join. A session from our server then ties each later photo to that name. That link is our server's word, and no World proof covers that photo. A photo with no session has its own World action, drawn from its hash, because the World app makes one proof per person and action, and refuses a second.
+**One action per photo.** The World app makes one proof per person and action, and refuses a second. So each photo has its own action, drawn from its hash. A session from our server says which username the photo goes under. That link is our server's word.
 
 **The other path.** A cancelled or refused proof gives no name and sends no picture. On the name step, the app shows "World did not finish" with World's word. On a photo with no name, it shows "Not authorised" with World's word.
 
@@ -235,7 +236,7 @@ Prize: [Cont] Best Use of IDKit.
 
 | The prize asks for | Where | State |
 | --- | --- | --- |
-| "Integrate IDKit in a functioning application" | `app/Sources/WorldStep.swift`. On a phone, a person got a name through World, and a photo was filed under it, on a local copy of mainnet | There, on that copy. The path with no second World trip has not run yet |
+| "Integrate IDKit in a functioning application" | `app/Sources/WorldStep.swift`. On a phone, a person got a name through World, and a photo was filed under it, on a local copy of mainnet | There, on that copy |
 | "verify the result on the server or onchain" | On the server: `web/src/lib/world.ts`. A contract for it is written, not wired | There, on the server |
 | "the specific product event requiring trust" | "The moment that needs trust", above | There |
 | "the minimum sufficient assurance" | "The credential", above | **Not there**. TO FILL (Armanc) |
@@ -277,9 +278,10 @@ We built this together with AI tools. We designed the system, chose its security
 - The contracts are written and fork-tested, not wired. The path we run does not send through them. Their check is a signature from a key on our server, not a check of the proof. A contract that checks a World proof itself is written for later.
 - No contract checks a seal's proof. That proof's size and cost rule it out on mainnet today.
 - The backend checks the seal. The web server cannot see the sealed file.
-- An image's name means this: a person with a World-proven name sent this seal's hash and this picture, through our server's session. No World proof is bound to that seal's hash.
-- Whoever holds a person's session can publish under that name.
-- **Our server does not check the seal. So a named person can file a made-up hash, with no World step.**
+- An image's name means this: World proves a unique human approved this exact photo; the session says which username. That person sent this picture.
+- Whoever holds a person's session and can pass World can publish under that name.
+- The web side also accepts a photo with a session and no World proof, as a fallback. The app does not use it. So the proof on every photo is the app's rule, not the server's.
+- **Our server does not check the seal. So a named person can file a made-up hash.**
 - The authorise page checks only the hash's format, so anyone can type a made-up hash and authorise it.
 - The app sends a ticket from the backend, and the web side does not read it.
 - The badge check is in the phone only. See "A badge for an event".
@@ -340,8 +342,9 @@ The app's screens do not explain any of this, so the facts are here.
 
 "Publish on zk-seal.eth" shows under "Start over", with the picture, only if a web address is set. The picture shows only after the seal's check passed. The address comes from Settings or from `WEB_URL` at launch, and it is not in this repo.
 Its words name the root the tree is moving to. Until that switch is real, names go under `armanc.eth`, and the app shows the name the web side returns.
-Pressing it runs these in order: the nickname, if the person has no name yet; the badge, if an event needs one; then the photo. With a session, the photo goes straight to the web side. With none, it takes its own World step.
-If the web side is ready, that World step goes to the World app and back, with no page between, through World's IDKit package, pinned to 4.2.0. The package's result goes to the web side unchanged. "Authorised" shows only after the web side answers that it verified the result, or answers with a record for this hash. A refusal or a failure shows "Not authorised", and the button stays. If the web side gives its own words for a refusal, the app shows those words as they are. If it refuses the saved session, the app forgets that session, and the next press goes on with no name.
+Pressing it runs these in order: the nickname, if the person has no name yet; the badge, if an event needs one; then the photo's own World step.
+If the web side is ready, the World step goes to the World app and back, with no page between, through World's IDKit package, pinned to 4.2.0. The package's result goes to the web side unchanged. "Authorised" shows only after the web side answers that it verified the result, or answers with a record for this hash. A refusal or a failure shows "Not authorised", and the button stays. If the web side gives its own words for a refusal, the app shows those words as they are. If it refuses the saved session, the app forgets that session, and the next press goes on with no name.
+After "Authorised", the app sends the picture and opens the site at this photo in the browser. The site's address comes from `SITE_URL` at launch or from Settings. With neither, it is `https://zk-seal.eth.limo/`.
 If the web side cannot be read or the World app cannot be opened, it opens that page in a sheet inside the app.
 It sends the hash, the edit, the size and `from=app` to that page, in the link, with no photo. It also sends an event's short name, chosen above the button or in Settings, or set with `EVENT_SLUG` at launch, but only if it is 3 to 40 lowercase letters, digits and hyphens, with no hyphen first.
 The page comes back through a `blankdemo://` link, and the app does not trust that link alone. "Authorised" shows only if the link names this hash and the web side then answers with a record for it. Anything else shows "Not authorised", and the button stays.
@@ -402,7 +405,7 @@ Its settings are environment variables, read in `web/src/lib/`. No key is in thi
 
 ### The gallery page
 
-`gallery/index.html` is one file. Open it in a browser. It reads Arkiv and Swarm by itself. If it cannot read ENS, it shows no "on chain" mark, and works as before.
+`gallery/index.html` is one file. Open it in a browser. It reads Arkiv and Swarm by itself. With `#seal=<hash>` in its address, it follows that one photo, and stops when the photo is done. If it cannot read ENS, it shows no "on chain" mark, and works as before.
 
 ### The contracts
 
