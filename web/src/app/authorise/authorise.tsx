@@ -85,7 +85,7 @@ function readVouch(value: unknown): Vouch | null {
   return value === "vouched" || value === "not-vouched" || value === "unreachable" ? value : null;
 }
 
-/** The verified parts of a server answer that carries a pass; null if it has no good pass. */
+/** The checked parts of a server answer that carries a pass; null if it has no good pass. */
 function readVerified(answer: unknown, pass: unknown): Verified | null {
   const a = answer as { name?: unknown; desk?: unknown; vouch?: unknown } | null;
   const kept = readPass(pass);
@@ -232,7 +232,7 @@ export function Authorise(props: {
       {phase.name === "verified" ? (
         <>
           <p className="state good" role="status">
-            A verified human authorised this seal. Pass:{" "}
+            A person with a World ID check (test identity) approved this seal. Pass:{" "}
             <span className="mono" title={phase.pass}>
               {shorten(phase.pass)}
             </span>

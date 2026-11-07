@@ -53,7 +53,7 @@ export const TREE_STEPS: { id: TreeStepId; title: string; fn: string }[] = [
   { id: "events-parent", title: "Place the events registry", fn: "EventsRegistry.setParent" },
 ];
 
-/** Gas each step took on a mainnet fork, rounded up: what the status page prices the rest with. */
+/** Gas each step used on a mainnet fork, rounded up: what the status page prices the rest with. */
 const STEP_GAS: Record<TreeStepId, bigint> = {
   resolver: BigInt(230000),
   "users-registry": BigInt(260000),

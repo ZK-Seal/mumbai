@@ -32,15 +32,15 @@ export default function JoinPage({ searchParams }: { searchParams: Promise<Query
     <main>
       <h1>Take a name</h1>
       <p className="soft">
-        A verified person can take one name of their own. The photos they authorise from then on are
-        shown under it, and each one gets a name of its own.
+        A person with a World ID-checked name (test identity) can take one name of their own. The
+        photos they approve from then on are shown under it, and each one gets a name of its own.
       </p>
       <Suspense fallback={<p className="soft">Reading the link…</p>}>
         <JoinPart searchParams={searchParams} />
       </Suspense>
       <footer className="notes">
         <p>One person keeps one name, and one name belongs to one person.</p>
-        <p>The name says a verified human holds it. It does not say who they are.</p>
+        <p>The name says a person with a World ID check (test identity) holds it. It does not say who they are.</p>
       </footer>
     </main>
   );

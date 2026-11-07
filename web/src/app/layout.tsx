@@ -6,7 +6,7 @@ import "./globals.css";
 const sans = Public_Sans({ subsets: ["latin"], variable: "--font-sans" });
 
 export const metadata: Metadata = {
-  title: "Blank Demo",
+  title: "zkSeal",
   description: "Who stands behind a sealed photo.",
 };
 

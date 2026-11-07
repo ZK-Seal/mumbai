@@ -83,7 +83,7 @@ function refused(reason: string, status: number, hash: unknown) {
  *
  * A person with a name may also publish with no `result` at all, only their `session`. Their
  * name was proven with World once, when they joined; the photo carries its zkSeal hash and is
- * filed under that name. So the photo is tied to the World-verified person by the app's session,
+ * filed under that name. So the photo is tied to the person with the World ID-checked name by the app's session,
  * not by a per-photo World proof, and World is not asked again. Anonymous photos still carry
  * their own proof. With no `result`, a session that does not hold is refused as `session`.
  *

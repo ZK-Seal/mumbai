@@ -1,7 +1,7 @@
 export default function Home() {
   return (
     <main>
-      <h1>Blank Demo</h1>
+      <h1>zkSeal</h1>
       <p>
         The app hides an area of a photo and gets back a checked result. This
         page adds one more line to that result: who stands behind it.

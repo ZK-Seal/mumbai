@@ -398,7 +398,7 @@ function causes(error: unknown): unknown[] {
 
 /**
  * Whether the node turned the transaction away for its nonce: another transaction from this
- * wallet took the nonce first, so this one was never admitted and may be sent again. Only an
+ * wallet used the nonce first, so this one was never admitted and may be sent again. Only an
  * error with no transaction hash counts; one with a hash may have landed.
  */
 export function isNonceRefusal(error: unknown): boolean {

@@ -68,7 +68,7 @@ export default function AuthorisePage({ searchParams }: { searchParams: Promise<
       </Suspense>
       <footer className="notes">
         <p>The seal itself was checked by our server, not by this page.</p>
-        <p>This line says a person approved the seal. It does not say who took the photo.</p>
+        <p>This line says a person approved the seal. It does not say who published the photo first.</p>
       </footer>
     </main>
   );

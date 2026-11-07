@@ -66,7 +66,11 @@ async function EventPart({ params }: { params: Promise<{ event: string }> }) {
         <>
           <p className="state good" role="status">
             {count(seals.length, "sealed photo", "sealed photos")} from{" "}
-            {count(people, "verified person", "verified people")}
+            {count(
+              people,
+              "person with a World ID-checked name (test identity)",
+              "people with World ID-checked names (test identities)",
+            )}
             {unnamed > 0 && `, ${unnamed} unnamed`}
           </p>
           {groups.map((group) => (
@@ -118,8 +122,8 @@ export default function EventPage({ params }: { params: Promise<{ event: string 
     <main>
       <h1>Sealed photos at one event</h1>
       <p className="soft">
-        Each sealed photo here was authorised by a verified person. A person with a name here is
-        counted once, however many photos they took. A photo authorised without a name stands
+        Each sealed photo here was approved by a person with a World ID check (test identity). A
+        person with a name here is counted once, however many photos they published. A photo authorised without a name stands
         alone: it may be the same person as another, so it is counted as an unnamed photo, not as
         a person.
       </p>
@@ -128,7 +132,7 @@ export default function EventPage({ params }: { params: Promise<{ event: string 
       </Suspense>
       <footer className="notes">
         <p>
-          A person is known here only by their pass, which is not shown, or by the name they took
+          A person is known here only by their pass, which is not shown, or by the name they chose
           with it.
         </p>
         <p>This page says how many people stand behind the photos. It does not say who they are.</p>
