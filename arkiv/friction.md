@@ -1,6 +1,6 @@
 # Arkiv feedback
 
-Only what really happened to us. Part 1 comes from real writes. These are test rows; no demo event has rows yet.
+Only what really happened to us. Part 1 comes from real writes, first under test runs. The demo rows under `ethglobal` came later.
 
 ## Context
 
@@ -95,12 +95,19 @@ What the writes showed:
 
 ## 11. What was good
 
-From real use. These are test rows; no demo event has rows yet.
+From real use.
 - The first real writes worked, with no bug found in our Arkiv code.
-- Public RPC: no 429 in 20 serial and 600 parallel reads, only slowness.
+- Public RPC: no 429 in 20 serial and 600 parallel reads, early on, only slowness. See part 13 for what came later.
 
 ## 12. Not Arkiv's, but it cost us time
 
 - Two proofs from the same person sent at the same instant: World refused one (`not-verified`), then accepted the very same proof a moment later. One at a time is safe.
 - Without an access key, the public RPC adds 10 s per write, rounded.
 - With every RPC call forced to 429, our routes answer `503 … "reason":"store"`, with no crash and no empty-but-OK answer. We forced this ourselves.
+
+## 13. The read budget ran out
+
+- **What we did:** our gallery page reads Arkiv from the browser, with no key, because a key cannot be kept in a public page. A few looks at the page in a row used the budget up.
+- **What we saw:** HTTP 429, `{"error":"ANON_COST_LIMITED",...}`, with `ratelimit: limit=10000, remaining=0, reset=402` and `retry-after: 402`. The page showed its "too many requests" line. Once it came back, one query of six rows showed `arkiv-cost: 10` and `ratelimit: limit=2000, remaining=1945, reset=5`.
+- **Why it matters:** a read-only page that anyone can open has no good place for a key, and people at one venue may share one address.
+- **Please:** say on the docs page how much one query costs and how the budget is counted, and offer a key that is safe in a public page.

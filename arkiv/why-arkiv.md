@@ -15,20 +15,20 @@ Only our server can read that folder and answer questions about it.
 
 ## A query you can run
 
-This reads our records with no key, and without our server.
+This reads our records with no key, and without our server. Reads with no key share a small budget, so it can answer 429 for a while.
 
 ```bash
 curl https://rpc.rabdi.db-chain.testnet.arkiv.network \
   -H "content-type: application/json" \
   --data @- <<'EOF'
 {"jsonrpc":"2.0","id":1,"method":"arkiv_query","params":[
- "event = str('test-run-a') AND $creator = addr(0x37D7D1bDA05129eBCb6e99Aa4ae106e8B75088eB)",
+ "event = str('ethglobal') AND $creator = addr(0x37D7D1bDA05129eBCb6e99Aa4ae106e8B75088eB)",
  {"select":{"key":true,"creator":true,"expiresAt":true,"creationFlags":true,"attributes":true},"limit":"0xa"}]}
 EOF
 ```
 
-You should see six rows, of two kinds: three seals and three pictures. These are test rows; no demo event has rows yet.
-Each row shows `creator`, and `creationFlags` with `readonly` true. Wallet in the explorer: https://rabdi.explorer.arkiv.network/address/0x37D7D1bDA05129eBCb6e99Aa4ae106e8B75088eB
+You should see 6 rows: 2 seals, 2 pictures and 2 names. Each row shows `creator`, and `creationFlags` with `readonly` true. We read these rows on 07.11.2026.
+Wallet in the explorer: https://rabdi.explorer.arkiv.network/address/0x37D7D1bDA05129eBCb6e99Aa4ae106e8B75088eB
 
 ## What Arkiv does not give us
 

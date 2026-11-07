@@ -2,7 +2,9 @@
 
 An iPhone app, a web side and a gallery page. Together they show two things about an event's photos: what was changed, and how many people stand behind them.
 
-Demo link: https://blank-demo-two.vercel.app/event/ethglobal. This is the public read-only site. By Armanc's word, not checked by us.
+Demo link: https://zk-seal.eth.limo. This opens the gallery page from its ENS name. It may lag this repo's page until the page is uploaded again.
+
+The public read-only site: https://blank-demo-two.vercel.app/event/ethglobal.
 
 Prototype, not audited.
 
@@ -92,11 +94,22 @@ Prize: Best Integration of ENSv2 into an Existing Project.
       └─ image2.ethglobal...       ----->  address B
 ```
 
-Once the root switch is real, a person's name is `<nickname>.users.zk-seal.eth`. By Armanc's word, not checked by us, the owner's steps for `zk-seal.eth` are done on mainnet, and the tree setup is next. So that switch is not there yet. The web side's root is one setting, `DESK_NAME`, with `armanc.eth` as its default. The app shows whatever name the web side returns.
+A person's name is `<nickname>.users.zk-seal.eth`. The web side's root is one setting, `DESK_NAME`, with `armanc.eth` as its default. The app shows whatever name the web side returns.
 
-**What it adds to the project.** So far the tree ran only on a local fork of mainnet.
+**What is on mainnet.** We read this through the Universal Resolver on 07.11.2026, at block 26359547.
 
-- The tree itself says which names passed World and what they published. Once on mainnet, anyone can read the tree.
+- The first user: address `0x965a865FcCB51A0Df34B9fb47a02e613F3B2f0C1`. That address's primary name points back to the first user's name.
+- `image1.ethglobal.events.zk-seal.eth`: its content hash is the Swarm reference `b5b525acdbe457e559283d24f9fc5bb8ca330d7aff7457c9b219d2259b49b56e`. Its text `eth.zk-seal.seal` holds the seal's hash `06eb02d69eac3767c5eca6c6a8a03356b4f8a5169de00cf5798e803e68ec1d92`, and `eth.zk-seal.by` holds the first user's name.
+- `image2.ethglobal.events.zk-seal.eth`: Swarm reference `16006fe172040f9f112e452de114da4b7b5dd1478711f55fd7e3931d4268ac76`, seal's hash `16cc599c83b7ce3e6f029687622a6e7b6ac7b8180d1f9a01261784ba041646a7`, by the same user.
+- Our tree's resolver: `0x97a649189fBCd263b5997b5920F7d9Db51a85E88`.
+- Our registries: under the root `0xEa0d3fDeE5dAFbb42b4eC8D4d5bd64C7Dcf192cf`, `users` `0x17157795D92f0FbF16aE34bfcc6ee71D3014269B`, and `events` `0x8c5Ed979804AA147aE4Ec77D74e530591411b700`.
+- `zk-seal.eth` itself: its content hash is the Swarm reference `533978621ae917a26304074ce8c2215c1be7b6de3b5ceed2a6ee6af8e0642fdf`, the gallery page. https://zk-seal.eth.limo answered HTTP 200 with it.
+- The root name is not on our registries. It sits in ENS's own `.eth` registry, with another resolver, `0x5f8beFDD28bf5026Bf5104e367FFe0EfE74d81EE`.
+- `zk-seal.eth.limo` may lag this repo's page until the page is uploaded again. When we read it, it served the same bytes as `gallery/index.html` at commit `edcd0af`, not the newest.
+
+**What it adds to the project.**
+
+- The tree itself says which names passed World and what they published. Anyone can read the tree on mainnet, without asking us.
 - A person and a picture each get a name a reader can use, in place of a long hash.
 - In ENSv2 a name can have its own registry. So each level here is its own contract: one registry for people, one for events, and one for each event's pictures. A new event is one new registry, and its names stay apart from every other event's.
 - One resolver of ours holds the records: the Swarm reference, the seal's hash and the person's name. So a name leads to its picture.
@@ -106,12 +119,12 @@ Once the root switch is real, a person's name is `<nickname>.users.zk-seal.eth`.
 
 | The prize asks for | Where | State |
 | --- | --- | --- |
-| "Integration must use ENSv2 on Ethereum mainnet" | `web/src/lib/tree.ts`. The tree ran on a local fork of mainnet, with a phone and no real money | **Not there** yet. By Armanc's word, not checked by us, the owner's steps are done and the tree setup is next. TO FILL (Armanc): which names, under which root, and one link |
+| "Integration must use ENSv2 on Ethereum mainnet" | `web/src/lib/tree.ts`. Real names under `zk-seal.eth`: see "What is on mainnet", above | There |
 | "integrate it into an existing project" | zkSeal is the existing project. The tree is in `web/src/lib/tree.ts` | There |
 | "It should be clear how ENSv2 improves the project" | "What it adds to the project", above | There |
-| "not just include hard-coded values" | A name comes from a real check: `registerUser` in `web/src/lib/tree.ts`. The gallery starts from six names, and each shows as real only with a row on Arkiv. Any other name found in a real row is listed after them. Clicking an event or a person shows their images | There in the code. **Not there** on mainnet |
-| "not just a cosmetic add-on" | Names come from real checks. The gallery lists names from Arkiv, and marks one "on chain" only if ENS on mainnet holds its exact record, read from the browser through the Universal Resolver | There in the code. It has never run, and no name of this tree is on mainnet yet, so no mark can show today |
-| "must have a link to a live demo" | The demo link at the top | There. By Armanc's word, not checked by us. The ENS name opening the page: **not there** |
+| "not just include hard-coded values" | A name comes from a real check: `registerUser` in `web/src/lib/tree.ts`. The gallery starts from six names, and each shows as real only with a row on Arkiv. Any other name found in a real row is listed after them. Clicking an event or a person shows their images | There |
+| "not just a cosmetic add-on" | Names come from real checks. The gallery lists names from Arkiv, and marks one "on chain" only if ENS on mainnet holds its exact record, read from the browser through the Universal Resolver | There. We saw the mark on real mainnet names, on the repo's page |
+| "must have a link to a live demo" | The demo link at the top | There. `zk-seal.eth.limo` opens the page from its ENS name |
 | "code needs to be open source and accessible on Github" | This repo, under MIT | There |
 
 **Its limits.**
@@ -120,7 +133,7 @@ Once the root switch is real, a person's name is `<nickname>.users.zk-seal.eth`.
 - Our server derives each person's key from their pass and the bot's key. One leak gives both. Our server can sign for every person. In the intended design the key stays on the phone.
 - The owner and the bot both hold every role today, so the bot could remove the owner.
 - A picture's name shows that a named person filed that hash. Our server does not check the seal, so the hash may be made up.
-- An event's ENS name opening the gallery page: **not there**.
+- An event's own ENS name opening the gallery page: **not there**. `ethglobal.events.zk-seal.eth` has no content hash. The root's name does.
 - Anyone can choose any name the web side accepts, so a name can look like another person's. A name shows nothing about who chose it.
 - A name that starts with `test-` stays out of the gallery's list, because our trial rows start that way.
 - A name that was never registered can still answer through the parent's resolver. So read "exists" from the owner, in the registry, not from a resolver answer.
@@ -141,24 +154,24 @@ Prize: Build on Arkiv (existing projects).
 
 **The wallet, the rows and one query.**
 
-- Wallet that wrote the entities: `0x37D7D1bDA05129eBCb6e99Aa4ae106e8B75088eB`. TO FILL (Armanc): confirm it is the final wallet.
+- Wallet that wrote the entities: `0x37D7D1bDA05129eBCb6e99Aa4ae106e8B75088eB`.
 - Wallet in the explorer: https://rabdi.explorer.arkiv.network/address/0x37D7D1bDA05129eBCb6e99Aa4ae106e8B75088eB
-- Seal record: https://rabdi.explorer.arkiv.network/entity/0x6a8bb67138a6578b57752251f2ce80ed6fda5975ddd69836fab04395329c2b19
-- Picture pointer: https://rabdi.explorer.arkiv.network/entity/0xfbe9f25e53427482e4441239a1fe3bd8a080df75f5fcd5302dcbff24bef5d70a
+- Seal record: https://rabdi.explorer.arkiv.network/entity/0xf25af966488981a92dbc8d6c37278744b666f03b86c7a39dbad25bff0b42f417
+- Picture pointer: https://rabdi.explorer.arkiv.network/entity/0x12cdd771ac68338e0275d51cc26a3bac1b01b870364ae0fedf3e7f488eec295e. It points to the Swarm reference `b5b525acdbe457e559283d24f9fc5bb8ca330d7aff7457c9b219d2259b49b56e`.
 
-One query you can run. It needs no key:
+One query you can run. It needs no key, but reads with no key share a small budget. When it runs out, Arkiv answers 429 with `ANON_COST_LIMITED`, and `Retry-After` says how long to wait. We saw `limit=10000` and 402 s.
 
 ```bash
 curl https://rpc.rabdi.db-chain.testnet.arkiv.network \
   -H "content-type: application/json" \
   --data @- <<'EOF'
 {"jsonrpc":"2.0","id":1,"method":"arkiv_query","params":[
- "event = str('test-run-a') AND $creator = addr(0x37D7D1bDA05129eBCb6e99Aa4ae106e8B75088eB)",
+ "event = str('ethglobal') AND $creator = addr(0x37D7D1bDA05129eBCb6e99Aa4ae106e8B75088eB)",
  {"select":{"key":true,"creator":true,"expiresAt":true,"creationFlags":true,"attributes":true},"limit":"0xa"}]}
 EOF
 ```
 
-You should see six rows, of two kinds. These are test rows. TO FILL (Armanc): the demo event's name and rows.
+You should see 6 rows: 2 seals, 2 pictures and 2 names. Each row shows `creator`, and `creationFlags` with `readonly` true. We read these rows on 07.11.2026. Older test rows are under `test-run-a` and `test-run-b`.
 
 **What its prize asks for, and where each ask is met.**
 
@@ -167,12 +180,12 @@ You should see six rows, of two kinds. These are test rows. TO FILL (Armanc): th
 | "An existing project in ETHGlobal's Continuity batch" | On ETHGlobal's form, not in this repo | TO FILL: confirm on the form |
 | "The Arkiv part is new work done at ETHGlobal Mumbai" | The first Arkiv commit, 06.11.2026, in `web/src/lib/arkiv.ts` | There |
 | The README says "what existed before the event and what you added" | "Old work and new work", below | There |
-| Writes to the current testnet | `web/src/lib/arkiv.ts`, on Arkiv's Rabdi testnet | There, with test rows |
-| "at least one feature users see reads its data from Arkiv" | `eventPhotos` in `web/src/lib/records.ts`, and `kindQuery` in `gallery/index.html` | There in the code. On a link a judge can open: the demo link at the top. By Armanc's word, not checked by us |
+| Writes to the current testnet | `web/src/lib/arkiv.ts`, on Arkiv's Rabdi testnet | There |
+| "at least one feature users see reads its data from Arkiv" | `eventPhotos` in `web/src/lib/records.ts`, and `kindQuery` in `gallery/index.html` | There, at the demo link at the top |
 | The README gives "the wallet address(es) that wrote your entities" | Above | There |
-| The README gives "one query we can run" | Above | There, on test rows |
+| The README gives "one query we can run" | Above | There |
 | `schema.md`, `friction.md`, `reach.md`, `why-arkiv.md`, `how-you-use-arkiv.md` | `/arkiv/` | There |
-| Answers "with links, numbers or a query we can run", from real rows | `/arkiv/` | **Not there**. Only test rows exist, under `test-run-a` and `test-run-b` |
+| Answers "with links, numbers or a query we can run", from real rows | `/arkiv/` | There, under the event `ethglobal`. We read them |
 | "A public repo with an open-source license" | This repo, under MIT | There |
 | "Say how you used AI, as ETHGlobal's rules require" | "How we used AI", below, and the form | There |
 
@@ -194,14 +207,14 @@ Prize: the Arkiv + Swarm bonus (existing projects).
 | The prize asks for | Where | State |
 | --- | --- | --- |
 | "uses both Arkiv and Swarm" | The picture on Swarm, the pointer on Arkiv | There |
-| `swarm.md` | `/arkiv/swarm.md` | There, with three TO FILL marks |
+| `swarm.md` | `/arkiv/swarm.md` | There, with two TO FILL marks: the upload's output and the video's moment |
 | "say what existed before the event" | "Old work and new work", below, and the line above | There, in `/arkiv/swarm.md` |
 | "which entity field holds the Swarm reference" | `ref` on `blank-demo.pictures`, in `web/src/lib/arkiv.ts` | There, in `/arkiv/swarm.md` |
-| "One Arkiv entity key and the Swarm reference it points to, with a link" | The key is the picture pointer in the Arkiv section | **Not there**. TO FILL (Armanc): the Swarm reference |
+| "One Arkiv entity key and the Swarm reference it points to, with a link" | The picture pointer in the Arkiv section, and https://download.gateway.ethswarm.org/bzz/b5b525acdbe457e559283d24f9fc5bb8ca330d7aff7457c9b219d2259b49b56e/ | There |
 | "postage stamp batch ID" and "the wallet that bought it (or who gave you the batch)" | `web/src/lib/swarm.ts` sends 64 zeros, and the gateway uses its own stamp | **Not there**. We own no batch |
 | "the Bee node or service you uploaded through" | The public gateway, `https://api.gateway.ethswarm.org`, in `web/src/lib/swarm.ts` | There, in `/arkiv/swarm.md` |
 | "The files in your repo that upload to Swarm and read from it" | Upload: `uploadPicture` in `web/src/lib/swarm.ts`, and `web/src/app/api/picture/[hash]/route.ts`. Read: `gallery/index.html`, and `web/src/app/event/[event]/page.tsx` | There, in `/arkiv/swarm.md` |
-| Steps for one upload and one read, and "what we should see" | `/arkiv/swarm.md` | **Not there**. The real output is not pasted yet |
+| Steps for one upload and one read, and "what we should see" | `/arkiv/swarm.md` | The steps and one real read are there. The upload's real output: **not there** |
 | "The moment in your demo video where Swarm is used" | The video | **Not there**. It is not filmed yet |
 | "What got in your way with Swarm" | `/arkiv/swarm.md` | There |
 | Never store an encrypted reference in an entity | `isSwarmRef` in `web/src/lib/swarm.ts` takes plain 64-hex references only | There |
@@ -214,9 +227,9 @@ Prize: [Cont] Best Use of IDKit.
 
 **What it adds to the project.** Without World, one person with several phones looks like a crowd. With it, a page can count how many people stand behind an event's photos, and it does not need to know who they are.
 
-**The moment that needs trust.** A photo joins an event's public list, and the page counts how many people stand behind the photos. We need to know one human stands behind a name. We do not need to know who they are.
+**The moment that needs trust.** A photo joins an event's public list, and the page counts how many people stand behind the photos. We need to know one human stands behind a name. We do not need to know who they are. The people count comes from the one-per-person proof at the name step.
 
-**The credential.** Proof of Human. Why it is the least that is enough: TO FILL (Armanc).
+**The credential.** Proof of Human. It is the least that is enough, because what we need is one person per name, and not who they are. World's docs say it shows "The user is a unique human", and it says nothing else about the person. A passport or an identity check would tie a public name to more about the person, with no gain for the count. World's docs call Selfie Check medium assurance, and we did not test it. The identities in this demo are test identities, which World's prize page allows.
 
 **What it proves.** "Approved by a unique human", not "taken by". The identities in this demo are test identities.
 
@@ -236,10 +249,10 @@ Prize: [Cont] Best Use of IDKit.
 
 | The prize asks for | Where | State |
 | --- | --- | --- |
-| "Integrate IDKit in a functioning application" | `app/Sources/WorldStep.swift`. On a phone, a person got a name through World, and a photo was filed under it, on a local copy of mainnet | There, on that copy |
+| "Integrate IDKit in a functioning application" | `app/Sources/WorldStep.swift`. On a phone, a person got a name through World, and photos were filed under it. That run is Armanc's word. The names are on mainnet, and we read them | There, with test identities |
 | "verify the result on the server or onchain" | On the server: `web/src/lib/world.ts`. A contract for it is written, not wired | There, on the server |
 | "the specific product event requiring trust" | "The moment that needs trust", above | There |
-| "the minimum sufficient assurance" | "The credential", above | **Not there**. TO FILL (Armanc) |
+| "the minimum sufficient assurance" | "The credential", above | There |
 | "Demonstrate a successful verification" | The video | **Not there**. It is not filmed yet |
 | "one meaningful alternative path" | `app/Sources/NameScreen.swift` and `app/Sources/ResultScreen.swift` show World's word | There in the code. **Not there** in the video |
 | Debrief: "friction encountered" | "Debrief", above | There |

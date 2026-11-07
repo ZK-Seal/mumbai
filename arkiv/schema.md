@@ -3,7 +3,7 @@
 We keep four kinds of entity on Arkiv's Rabdi testnet (chain ID 7794095).
 Our web server's wallet writes all of them.
 
-Writer wallet: `0x37D7D1bDA05129eBCb6e99Aa4ae106e8B75088eB`. It wrote the rows below, and they are the newest rows on Rabdi from our app. These are test rows; no demo event has rows yet.
+Writer wallet: `0x37D7D1bDA05129eBCb6e99Aa4ae106e8B75088eB`. It wrote the rows below.
 
 All kinds are written with expiry `fromDays(30)`, flags `{readonly: true, permissionlessExtension: false}` and an indexed `arkiv.schema` tag.
 All four are defined in `web/src/lib/arkiv.ts`.
@@ -102,9 +102,18 @@ Every read uses the wallet filter above.
 So six of our indexes serve no filter: `at` on all four kinds, and `label` and `pass` on the user kind.
 Arkiv's docs say an index costs extra on every write, and that sorting needs no index. The extra cost: not measured.
 
-## Real rows
+## The demo rows
 
-These are real writes on Rabdi. These are test rows; no demo event has rows yet. They came from staging World proofs from the simulator and generated pictures.
+These are the rows of the event `ethglobal`. We read these rows on 07.11.2026.
+
+- Query: `event = str('ethglobal') AND $creator = addr(0x37D7D1bDA05129eBCb6e99Aa4ae106e8B75088eB)` gives 6 read-only rows: 2 seals, 2 pictures and 2 names.
+- Seal record: https://rabdi.explorer.arkiv.network/entity/0xf25af966488981a92dbc8d6c37278744b666f03b86c7a39dbad25bff0b42f417
+- Picture pointer: https://rabdi.explorer.arkiv.network/entity/0x12cdd771ac68338e0275d51cc26a3bac1b01b870364ae0fedf3e7f488eec295e. Its `ref` is `b5b525acdbe457e559283d24f9fc5bb8ca330d7aff7457c9b219d2259b49b56e`.
+- ENS on mainnet says the same reference for `image1.ethglobal.events.zk-seal.eth`. We read that on 07.11.2026.
+
+## Earlier test rows
+
+These are real writes on Rabdi, from our tests. They came from staging World proofs from the simulator and generated pictures.
 
 | Kind | Entity | Transaction |
 | --- | --- | --- |
@@ -113,10 +122,10 @@ These are real writes on Rabdi. These are test rows; no demo event has rows yet.
 | `blank-demo.users` | `0xe17fa4d462c228fa5baccc50d7173bf758f9c9ea5d1cc93819105ce19e113fe0` | `0x1706c06389d651f56cdc1eca86dbb854c0283e2f60fa8a40a08bc70afbdf97fd` |
 | `blank-demo.names` | `0x4756baefa6d0041231499a17fbd6c2109a60222a53185220c22d2701ca7b0318` | `0xc623d2e5356517f9864e1e3e774021b89042e99118a42f9716b47c0599bef2c4` |
 
-We read all of this from the chain on 07.11.2026:
+We read all of this from the chain on 07.11.2026, before the demo rows:
 
-- Our wallet has 10 rows: 4 seals, 4 pictures, 1 user, 1 name.
-- `test-run-a` holds 3 seals and 3 pictures. `test-run-b` holds 1 seal, 1 picture and 1 name. Its user row has the label `test-run-b` and no event field. No other event has a row from our wallet.
+- Our wallet had 10 rows: 4 seals, 4 pictures, 1 user, 1 name.
+- `test-run-a` holds 3 seals and 3 pictures. `test-run-b` holds 1 seal, 1 picture and 1 name. Its user row has the label `test-run-b` and no event field. No other event had a row from our wallet then.
 - For the four rows above: status 1, gas limit 1,000,000, creator and owner our wallet, read-only true, expiry 1,296,000 blocks (30 days at 2 s).
 - Gas used: 205,171 (record), 185,531 (pointer), 181,930 (user), 178,992 (name).
 - The image name row's own `tx` field holds `0x56861eabf4698b3203eb5fcadc391a0a7b1240d6b3e075366734d83265f75bf5`. That is a transaction on a local fork of mainnet, where the `test-run-b` chain side ran. We looked for it on mainnet and did not find it.
@@ -129,19 +138,18 @@ We read all of this from the chain on 07.11.2026:
 
 ## One query you can run
 
-No key is needed, but the public RPC is heavily rate limited.
+It needs no key, but reads with no key share a small budget. When it runs out, Arkiv answers 429 with `ANON_COST_LIMITED`, and `Retry-After` says how long to wait. We saw `limit=10000` and 402 s.
 
 ```bash
 curl https://rpc.rabdi.db-chain.testnet.arkiv.network \
   -H "content-type: application/json" \
   --data @- <<'EOF'
 {"jsonrpc":"2.0","id":1,"method":"arkiv_query","params":[
- "event = str('test-run-a') AND $creator = addr(0x37D7D1bDA05129eBCb6e99Aa4ae106e8B75088eB)",
+ "event = str('ethglobal') AND $creator = addr(0x37D7D1bDA05129eBCb6e99Aa4ae106e8B75088eB)",
  {"select":{"key":true,"creator":true,"expiresAt":true,"creationFlags":true,"attributes":true},"limit":"0xa"}]}
 EOF
 ```
 
-You should see six rows, of two kinds: three seals and three pictures. These are test rows; no demo event has rows yet.
-Once a demo event has rows, change `test-run-a` to that event's name.
+You should see 6 rows: 2 seals, 2 pictures and 2 names. Each row shows `creator`, and `creationFlags` with `readonly` true. We read these rows on 07.11.2026.
 To see every row from our wallet, drop the `event` part.
 Explorer: https://rabdi.explorer.arkiv.network/entity-explorer

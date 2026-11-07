@@ -19,16 +19,25 @@ We do not encrypt. Each `ref` is a plain 64-hex reference, and the code takes no
 
 ## One example
 
-This row is under event `test-run-a`. These are test rows; no demo event has rows yet.
+This row is under the event `ethglobal`. We read these rows on 07.11.2026.
+
+- Arkiv entity key: `0x12cdd771ac68338e0275d51cc26a3bac1b01b870364ae0fedf3e7f488eec295e`
+- Swarm reference: `b5b525acdbe457e559283d24f9fc5bb8ca330d7aff7457c9b219d2259b49b56e`. ENS on mainnet gives the same reference for `image1.ethglobal.events.zk-seal.eth`. We read that on 07.11.2026.
+- Link to open: https://bzz.limo/bzz/b5b525acdbe457e559283d24f9fc5bb8ca330d7aff7457c9b219d2259b49b56e/
+- Same reference on the gateway: https://download.gateway.ethswarm.org/bzz/b5b525acdbe457e559283d24f9fc5bb8ca330d7aff7457c9b219d2259b49b56e/
+- Entity in the explorer: https://rabdi.explorer.arkiv.network/entity/0x12cdd771ac68338e0275d51cc26a3bac1b01b870364ae0fedf3e7f488eec295e
+
+An older test row, under event `test-run-a`:
 
 - Arkiv entity key: `0xfbe9f25e53427482e4441239a1fe3bd8a080df75f5fcd5302dcbff24bef5d70a`
 - Arkiv transaction: `0x152bc4c342fcd041363420175debf9ecc6a809d5940c5f70137fee1c3ea38d20`
 - Swarm reference: `1d1bc8a2dd539459fcb956c6d99a9d40849175306355ce113dce06a4e2b0fdde`
 - The pointer's `sha256`: `933c0a9902a83d0a7cdf1704990da5ab0515dce04fb409dbc7f86d3c88c21d55`
 - The pointer's `size`: 7,389 bytes.
-- Link to open: https://bzz.limo/bzz/1d1bc8a2dd539459fcb956c6d99a9d40849175306355ce113dce06a4e2b0fdde/
-- Same reference on the gateway: https://download.gateway.ethswarm.org/bzz/1d1bc8a2dd539459fcb956c6d99a9d40849175306355ce113dce06a4e2b0fdde/
-- Entity in the explorer: https://rabdi.explorer.arkiv.network/entity/0xfbe9f25e53427482e4441239a1fe3bd8a080df75f5fcd5302dcbff24bef5d70a
+
+## The gallery page is on Swarm too
+
+The page itself is on Swarm, at the reference `533978621ae917a26304074ce8c2215c1be7b6de3b5ceed2a6ee6af8e0642fdf`. ENS's content hash on `zk-seal.eth` points at it, so https://zk-seal.eth.limo opens it. We read both on 07.11.2026. It may lag this repo's page until the page is uploaded again.
 
 ## Postage stamp, wallet and service
 
@@ -66,9 +75,7 @@ curl -X POST "$WEB/api/picture/$HASH" \
 
 You should see `{"state":"stored","ref":"<64 hex>","url":"https://download.gateway.ethswarm.org/bzz/<ref>/"}`.
 
-Read through our server. This needs a public address, and we do not have one yet.
-
-Public link: https://blank-demo-two.vercel.app/event/ethglobal. By Armanc's word, not checked by us.
+Read through our server. Use the read-only site as `$WEB`: https://blank-demo-two.vercel.app
 
 ```bash
 curl "$WEB/api/seal/$HASH"
@@ -76,7 +83,7 @@ curl "$WEB/api/seal/$HASH"
 
 You should see `picture: {ref, url}` in the answer.
 
-Read Swarm alone, without our server. You can run this today, with the reference above:
+Read Swarm alone, without our server. You can run this today, with a reference above:
 
 ```bash
 curl -o back.jpg "https://bzz.limo/bzz/$REF/"
@@ -98,7 +105,9 @@ $ shasum -a 256 back.jpg
 933c0a9902a83d0a7cdf1704990da5ab0515dce04fb409dbc7f86d3c88c21d55  back.jpg
 ```
 
-The hash equals the pointer's `sha256`, and the size equals its `size`.
+The hash equals the pointer's `sha256`, and the size equals its `size`. That is the older test row.
+
+We read the demo picture once too, on 07.11.2026, from the gateway: HTTP 200, 623,372 bytes, SHA-256 `eb5018ed44c7b92fb20ade0577249491a11cba83a7a9c8dfa5f1361358d6e124`. That equals its pointer's `sha256`.
 
 ## The moment in the demo video
 
@@ -106,7 +115,7 @@ TO FILL (Serhas): the time stamp, once the video is filmed.
 
 ## What got in our way
 
-- The public gateway is slow. In our test 62 KB took 2 s and 2.3 MB took 49 s, and our route gives up after 55 s. So the app tries to send 1 MB or less. A picture upload took 11 to 14 s, mostly Swarm. These are test rows; no demo event has rows yet.
+- The public gateway is slow. In our test 62 KB took 2 s and 2.3 MB took 49 s, and our route gives up after 55 s. So the app tries to send 1 MB or less. A picture upload took 11 to 14 s, mostly Swarm.
 - Access lists do not work through the gateway. `/grantee` answers 404. They need an own node.
 - Depth 17 sounds large but is too small in practice: Swarm's table gives 44.70 kB effective there, and 112.06 MB at depth 19. We did not buy a batch.
 

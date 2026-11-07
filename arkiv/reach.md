@@ -22,13 +22,13 @@ We have not offered it to anyone yet. For now it is a demo.
 
 ## Can they use it today
 
-No. The writing server runs on Armanc's Mac, and it is not public tonight. By Armanc's word, not checked by us, the read-only public link is up: https://blank-demo-two.vercel.app/event/ethglobal.
+To read, yes: https://zk-seal.eth.limo, the gallery page, and https://blank-demo-two.vercel.app/event/ethglobal, the read-only site. To publish, no: the writing server runs on Armanc's Mac, and it is not public tonight.
 
-- Link to the event page: no demo event rows yet.
-- Entities written so far: no demo event rows yet.
-- Different passes behind them: no demo event rows yet.
+- Link to the event page: https://blank-demo-two.vercel.app/event/ethglobal
+- Entities under the event `ethglobal`: 6. That is 2 seals, 2 pictures and 2 names. We read these rows on 07.11.2026.
+- People behind them: 1, the first user, by the gallery's own count on 07.11.2026.
 
-Our test rows, for comparison. These are test rows; no demo event has rows yet.
+Our earlier test rows, for comparison, as they were before the demo rows.
 - Entities: 10 from our wallet. That is 4 seals, 4 pictures, 1 user and 1 name.
 - Different passes: 2. One under `test-run-a`, and one under `test-run-b`.
 - Read on 07.11.2026.

@@ -12,15 +12,16 @@ Questions from the prize: do the things you filter on, who can edit each entity,
 6. If the photo is at an event and the person has a name, our server makes the image's ENS name and writes one row for it to Arkiv.
 7. Anyone opens the event's page or the gallery page. They read the rows from Arkiv and the pictures from Swarm.
 
-The record and pointer writes ran for real, and the rows read back through our routes after a restart, with the file store empty. These are test rows; no demo event has rows yet.
+The record and pointer writes ran for real, and the rows read back through our routes after a restart, with the file store empty. Those were test rows.
 They used staging World proofs from the simulator and generated pictures, with a World proof for each photo. A later run wrote all four kinds under `test-run-b`, and they read back after a restart, while the chain side ran on a local fork.
-The writing server runs on Armanc's Mac, and it is not public tonight. By Armanc's word, not checked by us, the read-only public link is up, with no keys: https://blank-demo-two.vercel.app/event/ethglobal
+The demo rows came after that, under the event `ethglobal`: 6 rows, 2 seals, 2 pictures and 2 names. We read these rows on 07.11.2026. Their names are on mainnet, and we read those from ENS.
+The writing server runs on Armanc's Mac, and it is not public tonight. Anyone can read at https://zk-seal.eth.limo, the gallery page on Swarm, and at the read-only site with no keys, https://blank-demo-two.vercel.app/event/ethglobal. Both answered HTTP 200 on 07.11.2026.
 
 ## Each Arkiv feature, and what the user sees
 
 | Feature | How we use it | What the user sees |
 | --- | --- | --- |
-| Filter on `event` | Lists all records of one event | The event page shows those photos, grouped by person. It counts only people with a name. A photo with no name counts as unnamed. The three photos under `test-run-a` share one pass and have no name, so today's code shows them as unnamed. These are test rows; no demo event has rows yet |
+| Filter on `event` | Lists all records of one event | The event page shows those photos, grouped by person. It counts only people with a name. A photo with no name counts as unnamed. The three photos under `test-run-a` share one pass and have no name, so today's code shows them as unnamed. Those are test rows |
 | Filter on `pass` | Lists one person's seals | The list of photos behind one pass |
 | Reading all user rows | Finds one person's name in our code. `label` and `pass` are indexed, but the code does not filter on them | The app shows "name being created" until the name is done |
 | Filter on `hash` | Finds the record of one seal | The app can show "Authorised" when the web side answers with this record |
@@ -29,7 +30,7 @@ The writing server runs on Armanc's Mac, and it is not public tonight. By Armanc
 | Filter on the creator wallet | Every read filters on `$creator`, so it reads only what our wallet created | Fake rows with our tag should not reach the page. At the chain, the creator filter kept out one fake row handed to our wallet. Against the page itself this was not run |
 | Read-only flag | Set when each entity is written. Our reads drop any row without it | The pages do not show it. It only keeps rows off the screen |
 | 30-day expiry | Set when each entity is written | Each one drops out of the gallery 30 days after it was written |
-| Public reads | Any app can run the same query | `event = str('test-run-a') AND $creator = addr(0x37D7D1bDA05129eBCb6e99Aa4ae106e8B75088eB)` returns six rows, of two kinds. Wallet: https://rabdi.explorer.arkiv.network/address/0x37D7D1bDA05129eBCb6e99Aa4ae106e8B75088eB. These are test rows; no demo event has rows yet |
+| Public reads | Any app can run the same query | `event = str('ethglobal') AND $creator = addr(0x37D7D1bDA05129eBCb6e99Aa4ae106e8B75088eB)` returns 6 rows: 2 seals, 2 pictures and 2 names. Wallet: https://rabdi.explorer.arkiv.network/address/0x37D7D1bDA05129eBCb6e99Aa4ae106e8B75088eB |
 
 ## Does each choice fit the product
 
