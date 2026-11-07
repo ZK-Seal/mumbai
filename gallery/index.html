@@ -217,7 +217,8 @@
     background: var(--surface);
   }
   .row { display: flex; flex-wrap: wrap; align-items: center; gap: 0 8px; min-height: 48px; }
-  .chain { color: var(--accent); font-size: 12px; }
+  .chain { color: var(--accent); font-size: 14px; font-weight: 600; }
+  .legend { margin: 14px 0 0; color: var(--muted); font-size: 12px; line-height: 1.45; text-align: center; }
   .seal-watch { margin: 0 0 24px; padding: 14px; border: 1px solid var(--accent); border-radius: 14px; background: var(--surface); text-align: center; scroll-margin-top: 16px; }
   .seal-steps { margin: 12px 0; padding: 0; list-style: none; color: var(--muted); font-size: 14px; overflow-wrap: anywhere; }
   .seal-steps li { padding: 3px 0; }
@@ -336,6 +337,7 @@
   <noscript><p class="state bad">This page reads its records with JavaScript.</p></noscript>
   <div id="tree"></div>
   <section id="images" hidden></section>
+  <p id="legend" class="legend" hidden>✓ A real ENS name under zk-seal.eth. Our server made it after a World check of this photo. The seal is a proven edit of a signed original (our test key in this demo); the server takes its hash from the app.</p>
   <div id="many" role="status" hidden></div>
 </main>
 <script>
@@ -387,6 +389,7 @@ const ui = {
   retry: document.getElementById('retry'),
   tree: document.getElementById('tree'),
   images: document.getElementById('images'),
+  legend: document.getElementById('legend'),
   many: document.getElementById('many'),
 };
 
@@ -884,7 +887,12 @@ function drawImageRow(state) {
   open.setAttribute('aria-expanded', String(Boolean(panelNow && !panelNow.hidden)));
   const row = make('div', 'row');
   row.append(lightsWith(open, photo.person));
-  if (onChain.has(photo.imageName)) row.append(make('span', 'chain', 'on chain'));
+  if (onChain.has(photo.imageName)) {
+    const tick = make('span', 'chain', '✓');
+    tick.title = 'On chain, read from ENS';
+    tick.setAttribute('aria-label', 'On chain, read from ENS');
+    row.append(tick);
+  }
   row.append(toOwner(photo.person));
   const old = item.querySelector('.row');
   if (old) old.replaceWith(row);
@@ -1302,6 +1310,7 @@ function draw(linked) {
   paintMany();
   markSealRow();
   paintSealWatch();
+  ui.legend.hidden = ![...events.values()].flat().some((photo) => onChain.has(photo.imageName));
   const checks = [];
   for (const person of model.named) {
     if (person.name) checks.push({ name: person.name, address: person.address });
