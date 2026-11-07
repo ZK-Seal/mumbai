@@ -1,6 +1,6 @@
 # zkSeal at ETHGlobal Mumbai
 
-An iPhone app, a web side and a gallery page. Together they show two things about an event's photos: what was changed, and how many people stand behind them.
+An iPhone app, a web side and a gallery page. Together they show a proven edit of a signed original, with one person behind each name.
 
 Demo link: https://zk-seal.eth.limo. This opens the gallery page from its ENS name. It may lag this repo's page until the page is uploaded again.
 
@@ -275,7 +275,6 @@ We built this together with AI tools. We designed the system, chose its security
 **The gallery page does not say these, so they are here.**
 
 - Covers are drawn by the app and not proved.
-- It is not a privacy guarantee.
 - A name is a linkable pseudonym, not a real identity.
 - Our server holds the address keys and is the gate.
 - A picture's link to its seal is the uploader's word.
@@ -333,7 +332,6 @@ We built this together with AI tools. We designed the system, chose its security
 
 ## What the proof does not show
 
-- **It is not a privacy guarantee.** The file still carries a map of the area, which can show outlines, even writing on plain paper, and the original's hash.
 - **It does not show that a camera took the photo.** In this demo our test key signs the photo after the app sends it. That key is not on any trust list.
 - **It does not cover the look on the screen.** The mask and the tiles are drawn by the app.
 - **The authorise page does not check the seal.** It checks only the hash's format, so anyone can type a made-up hash and authorise it.
