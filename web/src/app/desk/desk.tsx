@@ -22,6 +22,7 @@ import {
 } from "@/lib/desk-setup";
 import { useWallets, walletSentence, type Provider, type Wallet } from "@/lib/wallets";
 import { Members } from "./members";
+import { Site } from "./site";
 
 const NO_WALLET =
   "No wallet found in this browser. In Brave, open Settings, Web3, and set the default Ethereum wallet to Brave Wallet, then reload.";
@@ -54,7 +55,7 @@ type Read =
   | { name: "not-a-desk" }
   | { name: "unreachable" };
 
-type Sent = { hash: Hex; state: "sent" | "confirmed" | "failed"; block: bigint | null };
+export type Sent = { hash: Hex; state: "sent" | "confirmed" | "failed"; block: bigint | null };
 
 function readConfig(answer: unknown): Config | null {
   const a = answer as { desk?: unknown; bot?: unknown; chainId?: unknown } | null;
@@ -106,11 +107,11 @@ function readSetup(answer: unknown, config: Config): Read {
   return { name: "read", plan, steps };
 }
 
-function explorer(chainId: number, hash: Hex): string | null {
+export function explorer(chainId: number, hash: Hex): string | null {
   return chainId === 1 ? `https://etherscan.io/tx/${hash}` : null;
 }
 
-function short(value: string): string {
+export function short(value: string): string {
   return `${value.slice(0, 8)}…${value.slice(-6)}`;
 }
 
@@ -220,9 +221,44 @@ export function Desk() {
     }
   }
 
-  async function send(id: StepId) {
+  /**
+   * Sends one transaction from the chosen wallet, on the desk's chain, and follows it to its
+   * block. Gives back whether it went through.
+   */
+  async function sendFromWallet(
+    tx: { to: Address; data: Hex },
+    track: (sent: Sent) => void,
+  ): Promise<boolean> {
     const provider = chosen?.provider;
-    if (!provider || !account || typeof config !== "object" || !config) return;
+    if (!provider || !account || typeof config !== "object" || !config) return false;
+    let now: number | null;
+    try {
+      now = readChainId(await provider.request({ method: "eth_chainId" }));
+    } catch (error) {
+      setSentence(walletSentence(error) ?? "The wallet cannot be reached. Try again.");
+      return false;
+    }
+    setChainId(now);
+    if (now !== config.chainId && !(await switchChain(provider, config.chainId))) return false;
+    const wallet = createWalletClient({ transport: transport(provider) });
+    let hash: Hex;
+    try {
+      hash = await wallet.sendTransaction({ account, chain: null, to: tx.to, data: tx.data });
+    } catch (error) {
+      setSentence(walletSentence(error) ?? "The transaction was not sent.");
+      return false;
+    }
+    track({ hash, state: "sent", block: null });
+    const reader = createPublicClient({ transport: transport(provider) });
+    const receipt = await reader.waitForTransactionReceipt({ hash }).catch(() => null);
+    const state = receipt?.status === "success" ? "confirmed" : "failed";
+    track({ hash, state, block: receipt?.blockNumber ?? null });
+    if (state === "failed") setSentence("The transaction did not go through.");
+    return state === "confirmed";
+  }
+
+  async function send(id: StepId) {
+    if (!chosen || !account || typeof config !== "object" || !config) return;
     if (read.name !== "read") return;
     setSentence(null);
     let tx;
@@ -234,30 +270,24 @@ export function Desk() {
     }
     setBusy(true);
     try {
-      let now: number | null;
-      try {
-        now = readChainId(await provider.request({ method: "eth_chainId" }));
-      } catch (error) {
-        setSentence(walletSentence(error) ?? "The wallet cannot be reached. Try again.");
-        return;
-      }
-      setChainId(now);
-      if (now !== config.chainId && !(await switchChain(provider, config.chainId))) return;
-      const wallet = createWalletClient({ transport: transport(provider) });
-      let hash: Hex;
-      try {
-        hash = await wallet.sendTransaction({ account, chain: null, to: tx.to, data: tx.data });
-      } catch (error) {
-        setSentence(walletSentence(error) ?? "The transaction was not sent.");
-        return;
-      }
-      setSent((was) => ({ ...was, [id]: { hash, state: "sent", block: null } }));
-      const reader = createPublicClient({ transport: transport(provider) });
-      const receipt = await reader.waitForTransactionReceipt({ hash }).catch(() => null);
-      const state = receipt?.status === "success" ? "confirmed" : "failed";
-      setSent((was) => ({ ...was, [id]: { hash, state, block: receipt?.blockNumber ?? null } }));
-      if (state === "failed") setSentence("The transaction did not go through.");
+      await sendFromWallet(tx, (mine) => setSent((was) => ({ ...was, [id]: mine })));
       await refresh(config);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Sends the site's transactions one after the other, as long as each goes through. */
+  async function sendSite(
+    txs: { to: Address; data: Hex }[],
+    track: (index: number, sent: Sent) => void,
+  ): Promise<void> {
+    setSentence(null);
+    setBusy(true);
+    try {
+      for (const [index, tx] of txs.entries()) {
+        if (!(await sendFromWallet(tx, (mine) => track(index, mine)))) return;
+      }
     } finally {
       setBusy(false);
     }
@@ -381,6 +411,14 @@ export function Desk() {
           </>
         )}
       </section>
+
+      <Site
+        account={account}
+        chainId={config.chainId}
+        busy={busy}
+        connected={chosen !== null}
+        send={sendSite}
+      />
 
       <Members desk={config.desk} />
     </>
