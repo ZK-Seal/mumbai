@@ -132,6 +132,7 @@ A person's name is `<nickname>.users.zk-seal.eth`. The web side's root is one se
 - Our server is the registrar. It checks World, then our bot wallet makes the name. No contract makes that check today.
 - Our server derives each person's key from their pass and the bot's key. One leak gives both. Our server can sign for every person. In the intended design the key stays on the phone.
 - The owner and the bot both hold every role today, so the bot could remove the owner.
+- Our registries run ENS's registry code `0xfaa23592aca10a6d8875b18ea86954e8eb6d8d72`, the version ENS's Deployments page lists. ENS's tools have moved to a newer version, so ENS's app may show an "Untrusted registry" badge on these names.
 - A picture's name shows that a named person filed that hash. Our server does not check the seal, so the hash may be made up.
 - An event's own ENS name opening the gallery page: **not there**. `ethglobal.events.zk-seal.eth` has no content hash. The root's name does.
 - Anyone can choose any name the web side accepts, so a name can look like another person's. A name shows nothing about who chose it.
@@ -352,7 +353,7 @@ The app's screens do not explain any of this, so the facts are here.
 ## The Publish button
 
 "Publish on zk-seal.eth" shows under "Start over", with the picture, only if a web address is set. The picture shows only after the seal's check passed. The address comes from Settings or from `WEB_URL` at launch, and it is not in this repo.
-Its words name the root the tree is moving to. Until that switch is real, names go under `armanc.eth`, and the app shows the name the web side returns.
+Its words name the tree's root. The app shows the name the web side returns.
 Pressing it runs these in order: the nickname, if the person has no name yet; the badge, if an event needs one; then the photo's own World step.
 If the web side is ready, the World step goes to the World app and back, with no page between, through World's IDKit package, pinned to 4.2.0. The package's result goes to the web side unchanged. "Authorised" shows only after the web side answers that it verified the result, or answers with a record for this hash. A refusal or a failure shows "Not authorised", and the button stays. If the web side gives its own words for a refusal, the app shows those words as they are. If it refuses the saved session, the app forgets that session, and the next press goes on with no name.
 After "Authorised", the app sends the picture and opens the site at this photo in the browser. The site's address comes from `SITE_URL` at launch or from Settings. With neither, it is `https://zk-seal.eth.limo/`.

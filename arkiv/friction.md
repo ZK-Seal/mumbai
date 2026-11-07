@@ -8,7 +8,7 @@ Only what really happened to us. Part 1 comes from real writes, first under test
 - Versions: `@arkiv-network/sdk` 1.0.1 and `viem` 2.57.16, from `web/package-lock.json`. Node version: not read.
 - Network: Rabdi testnet, chain ID 7794095.
 - What we used: the SDK, the docs, the public RPC, the explorer, the faucet, and this event's MCP guide and skills.
-- What we did not use: an access key. The MCP's `network_status` says an application needs one (`requiredForApplication: true`). We went without it, and part 11 gives the cost.
+- What we did not use: an access key. The MCP's `network_status` says an application needs one (`requiredForApplication: true`). We went without it, and part 12 gives the cost.
 
 ## 1. What broke on the real write
 
