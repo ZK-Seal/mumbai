@@ -109,10 +109,6 @@ The hash equals the pointer's `sha256`, and the size equals its `size`. That is 
 
 We read the demo picture once too, on 07.11.2026, from the gateway: HTTP 200, 623,372 bytes, SHA-256 `eb5018ed44c7b92fb20ade0577249491a11cba83a7a9c8dfa5f1361358d6e124`. That equals its pointer's `sha256`.
 
-## The moment in the demo video
-
-See the video.
-
 ## What got in our way
 
 - The public gateway is slow. In our test 62 KB took 2 s and 2.3 MB took 49 s, and our route gives up after 55 s. So the app tries to send 1 MB or less. A picture upload took 11 to 14 s, mostly Swarm.

@@ -215,7 +215,6 @@ Prize: the Arkiv + Swarm bonus (existing projects).
 | "the Bee node or service you uploaded through" | The public gateway, `https://api.gateway.ethswarm.org`, in `web/src/lib/swarm.ts` | There, in `/arkiv/swarm.md` |
 | "The files in your repo that upload to Swarm and read from it" | Upload: `uploadPicture` in `web/src/lib/swarm.ts`, and `web/src/app/api/picture/[hash]/route.ts`. Read: `gallery/index.html`, and `web/src/app/event/[event]/page.tsx` | There, in `/arkiv/swarm.md` |
 | Steps for one upload and one read, and "what we should see" | `/arkiv/swarm.md` | The steps and one real read are there. The upload's raw output is not |
-| "The moment in your demo video where Swarm is used" | The video | See the video |
 | "What got in your way with Swarm" | `/arkiv/swarm.md` | There |
 | Never store an encrypted reference in an entity | `isSwarmRef` in `web/src/lib/swarm.ts` takes plain 64-hex references only | There |
 
@@ -253,8 +252,7 @@ Prize: [Cont] Best Use of IDKit.
 | "verify the result on the server or onchain" | On the server: `web/src/lib/world.ts`. A contract for it is written, not wired | There, on the server |
 | "the specific product event requiring trust" | "The moment that needs trust", above | There |
 | "the minimum sufficient assurance" | "The credential", above | There |
-| "Demonstrate a successful verification" | The video | See the video |
-| "one meaningful alternative path" | `app/Sources/NameScreen.swift` and `app/Sources/ResultScreen.swift` show World's word | There in the code. See the video |
+| "one meaningful alternative path" | `app/Sources/NameScreen.swift` and `app/Sources/ResultScreen.swift` show World's word | There in the code |
 | Debrief: "friction encountered" | "Debrief", above | There |
 | Debrief: "time to first success" | "Debrief", above | Not measured |
 | Debrief: "missing capability or documentation", and "the one improvement" | "Debrief", above | There, from our experience tonight |
