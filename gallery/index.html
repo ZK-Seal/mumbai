@@ -218,6 +218,13 @@
   }
   .row { display: flex; flex-wrap: wrap; align-items: center; gap: 0 8px; min-height: 48px; }
   .chain { color: var(--accent); font-size: 12px; }
+  .seal-watch { margin: 0 0 24px; padding: 14px; border: 1px solid var(--accent); border-radius: 14px; background: var(--surface); text-align: center; scroll-margin-top: 16px; }
+  .seal-steps { margin: 12px 0; padding: 0; list-style: none; color: var(--muted); font-size: 14px; overflow-wrap: anywhere; }
+  .seal-steps li { padding: 3px 0; }
+  .seal-steps li.done { color: var(--ink); }
+  .seal-steps li.done::before { content: '✓ '; color: var(--accent); }
+  .seal-watch .frame { overflow: hidden; border-radius: 10px; }
+  #images .branch > li.seal-focus { background: var(--accent-soft); }
   .name, .to {
     min-width: 0;
     min-height: 44px;
@@ -1243,7 +1250,8 @@ function draw(linked) {
     rowsOf(rows.users, readUser),
   );
   // The listed events, and any other event found in a real row. A trial shows only if the link or the name asks for it.
-  const events = new Map([...model.events].filter(([slug]) => !slug.startsWith(TRIAL_EVENT) || slug === linked));
+  const sealEvent = sealWatch && sealWatch.record ? sealWatch.record.event : null;
+  const events = new Map([...model.events].filter(([slug]) => !slug.startsWith(TRIAL_EVENT) || slug === linked || slug === sealEvent));
   latest = { events, complete: rows.records.complete };
   if (currentPerson) currentPerson = model.named.find((person) => person.owner === currentPerson.owner) || currentPerson;
   namesOf = new Map();
@@ -1273,6 +1281,12 @@ function draw(linked) {
   for (const person of model.named) {
     if (personViews.has(person.owner)) updatePersonView(person);
   }
+  const sealSlug = sealEventToOpen(events);
+  if (sealSlug) {
+    openEvent(sealSlug);
+    limbsSign = null;
+    ui.tree.querySelector('.split').replaceChildren(usersLimb(model.named, rows.users !== null), eventsLimb(events, latest.complete));
+  }
   if (currentEvent || currentPerson) {
     showCount();
   } else {
@@ -1286,6 +1300,8 @@ function draw(linked) {
   }
   paintLit();
   paintMany();
+  markSealRow();
+  paintSealWatch();
   const checks = [];
   for (const person of model.named) {
     if (person.name) checks.push({ name: person.name, address: person.address });
@@ -1346,6 +1362,165 @@ async function refresh(linked) {
   }
 }
 
+// A link to one photo: this page with #seal=<hash>. The app opens it after Publish, and the person watches the photo go on chain.
+const SEAL_READ_EVERY_MS = 4000;
+const SEAL_READ_AFTER_TROUBLE_MS = 10000;
+const SEAL_PICTURE_AGAIN_MS = 10000;
+const SEAL_GIVE_UP_MS = 600000;
+const PICTURE_NOT_REACHED = 'This picture cannot be reached just now.';
+let sealWatch = null;
+let pageLinked = null;
+
+// A record of this seal, with or without an event. A photo with no event still has a state to show.
+function readSealRecord(row) {
+  if (!believable(row)) return null;
+  const fields = fieldsOf(row);
+  const place = placeOf(row, fields);
+  const hash = hexField(fields, 'hash');
+  if (place.kind !== RECORD_KIND || !hash) return null;
+  return { ...place, hash, event: eventField(fields), userName: nameField(fields, 'name') };
+}
+
+// Only this photo's rows. The hash is checked as 64 hex digits, so it cannot close the quoted string. Says if anything is new.
+async function readSealRows(watch) {
+  const read = await readRows("hash = str('" + watch.hash + "') AND $creator = addr(" + CREATOR + ') ORDER BY at:u64 ASC');
+  const record = read.rows.map(readSealRecord).filter(Boolean)[0] || null;
+  if (sealWatch !== watch || !record) return false;
+  const ofEvent = (row) => row.hash === watch.hash && (!row.event || !record.event || row.event === record.event);
+  const pointer = read.rows.map(readPointer).filter(Boolean).find(ofEvent) || null;
+  const named = read.rows.map(readImageName).filter(Boolean).find(ofEvent) || null;
+  const imageName = named ? named.imageName : null;
+  const isNew = !watch.record || (pointer && !watch.pointer) || (imageName && !watch.imageName);
+  watch.record = record;
+  watch.pointer = pointer;
+  watch.imageName = imageName;
+  return Boolean(isNew);
+}
+
+const sealGetsNoName = (record) => !record.userName || !record.event;
+const sealHasAllRows = (watch) => Boolean(watch.record && watch.pointer && (watch.imageName || sealGetsNoName(watch.record)));
+
+function paintSealWatch() {
+  const watch = sealWatch;
+  if (!watch) return;
+  const step = (node, finished, text) => {
+    node.textContent = text;
+    node.classList.toggle('done', finished);
+  };
+  step(watch.authorised, Boolean(watch.record), watch.record ? 'Authorised' : 'Waiting for its record');
+  step(watch.swarm, Boolean(watch.pointer), watch.pointer ? 'Picture on Swarm' : 'Picture on Swarm: not yet');
+  if (watch.imageName) {
+    step(watch.chain, true, 'On chain as ' + watch.imageName + (onChain.has(watch.imageName) ? ', read from ENS' : ', by our records'));
+  } else if (watch.record && sealGetsNoName(watch.record)) {
+    step(watch.chain, false, 'No name: a name needs an event and a named person');
+  } else {
+    step(watch.chain, false, 'On chain: not yet');
+  }
+}
+
+// The picture, once the pointer exists. A fresh upload can take a while to reach a gateway, so it is tried again.
+function showSealPicture(watch) {
+  if (!watch.pointer) return;
+  const label = watch.imageName || 'This photo';
+  if (!watch.frame) {
+    watch.frame = loadedFrame({ pointer: watch.pointer }, label);
+    watch.frameAt = Date.now();
+    watch.box.append(watch.frame);
+    return;
+  }
+  const note = watch.frame.querySelector('.note');
+  if (!watch.frame.classList.contains('shown') && note && note.textContent === PICTURE_NOT_REACHED && Date.now() - watch.frameAt >= SEAL_PICTURE_AGAIN_MS) {
+    const next = loadedFrame({ pointer: watch.pointer }, label);
+    watch.frame.replaceWith(next);
+    watch.frame = next;
+    watch.frameAt = Date.now();
+  }
+}
+
+function sealPictureSettled(watch) {
+  if (!watch.frame) return false;
+  if (watch.frame.classList.contains('shown')) return true;
+  const note = watch.frame.querySelector('.note');
+  return Boolean(note) && note.textContent !== PICTURE_NOT_REACHED && note.textContent !== 'Loading picture…';
+}
+
+// Asks about this photo until it is done, then stops. A failed read waits, and nothing shows.
+async function watchSeal(watch) {
+  const started = Date.now();
+  while (sealWatch === watch) {
+    let wait = SEAL_READ_EVERY_MS;
+    if (!document.hidden && !sealHasAllRows(watch)) {
+      try {
+        // Something new also goes to the tree, so that the photo's row appears there.
+        if (await readSealRows(watch)) refresh(pageLinked);
+      } catch (problem) {
+        wait = problem instanceof ReadFailure && problem.busy ? Math.max(problem.waitSeconds * 1000, wait) : SEAL_READ_AFTER_TROUBLE_MS;
+      }
+    }
+    if (sealWatch !== watch) return;
+    paintSealWatch();
+    showSealPicture(watch);
+    if (sealHasAllRows(watch) && sealPictureSettled(watch)) return;
+    if (Date.now() - started >= SEAL_GIVE_UP_MS) {
+      watch.note.hidden = false;
+      return;
+    }
+    await new Promise((done) => { setTimeout(done, wait); });
+  }
+}
+
+function sealEventToOpen(events) {
+  const watch = sealWatch;
+  if (!watch || watch.opened) return null;
+  for (const [slug, photos] of events) {
+    if (photos.some((photo) => photo.record.hash === watch.hash)) {
+      watch.opened = true;
+      return slug;
+    }
+  }
+  return null;
+}
+
+function markSealRow() {
+  if (!sealWatch) return;
+  for (const view of eventViews.values()) {
+    const state = view.states.get(sealWatch.hash);
+    if (state) state.item.classList.add('seal-focus');
+  }
+}
+
+function startSealWatch() {
+  if (sealWatch) sealWatch.box.remove();
+  sealWatch = null;
+  document.querySelectorAll('.seal-focus').forEach((item) => item.classList.remove('seal-focus'));
+  const found = /^#seal=([0-9a-fA-F]{64})$/.exec(window.location.hash);
+  if (!found) return;
+  const watch = {
+    hash: found[1].toLowerCase(),
+    box: make('section', 'seal-watch'),
+    authorised: make('li', ''),
+    swarm: make('li', ''),
+    chain: make('li', ''),
+    note: make('p', 'note', 'Not finished yet. Open this page again to check.'),
+    record: null,
+    pointer: null,
+    imageName: null,
+    frame: null,
+    frameAt: 0,
+    opened: false,
+  };
+  const steps = make('ul', 'seal-steps');
+  steps.append(watch.authorised, watch.swarm, watch.chain);
+  watch.note.hidden = true;
+  watch.box.setAttribute('aria-live', 'polite');
+  watch.box.append(make('h2', '', 'This photo'), steps, watch.note);
+  ui.tree.before(watch.box);
+  sealWatch = watch;
+  paintSealWatch();
+  watch.box.scrollIntoView({ block: 'start' });
+  watchSeal(watch).catch(() => {});
+}
+
 function start() {
   const link = new URLSearchParams(window.location.search);
   // Every event's name points to this same page, so the event is read from the name that opened it: <event>.events.<root>.eth, through any gateway.
@@ -1367,6 +1542,9 @@ function start() {
   window.addEventListener('focus', readNow);
   document.addEventListener('visibilitychange', readNow);
   setState('Reading the records…', 'wait');
+  pageLinked = linked;
+  startSealWatch();
+  window.addEventListener('hashchange', startSealWatch);
   refresh(linked);
 }
 
